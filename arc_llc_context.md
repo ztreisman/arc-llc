@@ -1,5 +1,7 @@
 # Arc-Space LLC Estimator: Toy Implementation
 
+original spec, preserved as-is; see RESULTS.md for corrections including to the ground-truth formula
+
 ## Goal
 
 Implement and compare two estimators of the RLCT (real log canonical threshold) / local learning
@@ -58,7 +60,7 @@ At a true minimum w*:
 - The Hessian H = ∇²K(w*) has null space = T_{w*}W₀ (tangent space to the solution set)
 - dim(null H) is a lower bound on dim W₀
 
-From Musztata's formula, the RLCT is:
+From Mustață's formula, the RLCT is:
   λ = lim_{m→∞} [n(m+1) - dim Contact_m] / m
 
 where Contact_m = {arcs of order m tangent to W₀}.

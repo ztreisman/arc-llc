@@ -13,6 +13,8 @@ Both are validated against a **volume-scaling estimator** and against ground tru
 rank-1 matrix factorization with true rank 0 (K(A,B) = ||AB||_F², true distribution =
 zero matrix), where λ is known analytically: λ = min(n,m)/2 for r=1.
 
+The geometric estimators are motivated by Mustață's jet-scheme characterization of log canonical thresholds (arXiv:math/0102201): the RLCT is determined by dimensions of contact loci in arc space, and the Hessian null space computes the first-order contact data. The longer-term question is whether higher-order jet/contact statistics yield cheaper or more informative LLC estimators than sampling-based methods.
+
 See [`RESULTS.md`](RESULTS.md) for the full write-up — headline numbers, a correction to
 an internal inconsistency in the original spec's ground-truth formula, several
 implementation bugs found and fixed along the way (a log-multiplicity bias in the
@@ -45,7 +47,7 @@ Runs all 6 experiments (~8-9 minutes), prints result tables, and writes:
 
 ## Headline result
 
-All estimators agree with (corrected) ground truth to within a few percent:
+Volume-scaling and Hessian estimators agree with corrected ground truth to within a few percent across all cases. SGLD is accurate on the singular models but overshoots the regular case by ~20% (likely under-equilibration at higher λ; see RESULTS.md).
 
 | Experiment | d | true λ | Volume scaling | Hessian null space | SGLD |
 |---|---|---|---|---|---|
