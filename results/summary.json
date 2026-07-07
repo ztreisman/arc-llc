@@ -1,0 +1,223 @@
+{
+  "experiment_1": {
+    "rows": [
+      [
+        "Volume scaling",
+        0.4583473723748619,
+        0.4583473723748619
+      ],
+      [
+        "Hessian null space (branch='A': A free, on the {B=0} plane)",
+        0.5,
+        0.5
+      ],
+      [
+        "Hessian null space (branch='B': B free, on the {A=0} plane)",
+        0.5,
+        0.5
+      ],
+      [
+        "SGLD (devinterp-style)",
+        0.5249697775038804,
+        0.5249697775038804
+      ]
+    ],
+    "lambda_true": 0.5,
+    "ratio_true": 0.5
+  },
+  "experiment_2": {
+    "rows": [
+      [
+        "Volume scaling",
+        0.9830490446590423,
+        0.49152452232952115
+      ],
+      [
+        "Hessian null space (branch='A': A free, on the {B=0} plane)",
+        1.0,
+        0.5
+      ],
+      [
+        "Hessian null space (branch='B': B free, on the {A=0} plane)",
+        1.0,
+        0.5
+      ],
+      [
+        "SGLD (devinterp-style)",
+        1.0862982740939127,
+        0.5431491370469563
+      ]
+    ],
+    "lambda_true": 1.0,
+    "ratio_true": 0.5
+  },
+  "experiment_3": {
+    "rows": [
+      [
+        "Volume scaling",
+        1.926326419544739,
+        0.9631632097723695
+      ],
+      [
+        "Hessian null space (at origin)",
+        2.0,
+        1.0
+      ],
+      [
+        "SGLD (devinterp-style)",
+        2.4512441645476883,
+        1.2256220822738442
+      ]
+    ],
+    "lambda_true": 2.0,
+    "ratio_true": 1.0
+  },
+  "experiment_4": {
+    "lambda_true": 1.0,
+    "ratio_true": 0.5,
+    "trajectory": [
+      {
+        "step": 1,
+        "dist_to_origin": 10.00385915233573,
+        "ratio": 28.683684525274973
+      },
+      {
+        "step": 2,
+        "dist_to_origin": 9.970589073274366,
+        "ratio": 28.53865171391376
+      },
+      {
+        "step": 4,
+        "dist_to_origin": 9.904353226056633,
+        "ratio": 27.585087369081773
+      },
+      {
+        "step": 7,
+        "dist_to_origin": 9.806046634605295,
+        "ratio": 26.24491693863491
+      },
+      {
+        "step": 12,
+        "dist_to_origin": 9.64625284456541,
+        "ratio": 24.49979398601402
+      },
+      {
+        "step": 20,
+        "dist_to_origin": 9.405938908884703,
+        "ratio": 21.632032839993048
+      },
+      {
+        "step": 34,
+        "dist_to_origin": 9.048357673945722,
+        "ratio": 16.300639998548757
+      },
+      {
+        "step": 57,
+        "dist_to_origin": 8.654998690315134,
+        "ratio": 10.5415433661038
+      },
+      {
+        "step": 95,
+        "dist_to_origin": 8.379851878795252,
+        "ratio": 4.031454616993753
+      },
+      {
+        "step": 157,
+        "dist_to_origin": 8.28335568699295,
+        "ratio": 0.5431366895500503
+      },
+      {
+        "step": 261,
+        "dist_to_origin": 8.237237973861795,
+        "ratio": 0.4899354937500876
+      },
+      {
+        "step": 434,
+        "dist_to_origin": 8.145341113397144,
+        "ratio": 0.5011325496475227
+      },
+      {
+        "step": 719,
+        "dist_to_origin": 7.941649890672345,
+        "ratio": 0.4997740050225624
+      },
+      {
+        "step": 1194,
+        "dist_to_origin": 7.4750151668369345,
+        "ratio": 0.522981518647294
+      },
+      {
+        "step": 1981,
+        "dist_to_origin": 6.391532185178497,
+        "ratio": 0.5678312966749175
+      },
+      {
+        "step": 3286,
+        "dist_to_origin": 3.9766012595391826,
+        "ratio": 0.493809960344203
+      },
+      {
+        "step": 5451,
+        "dist_to_origin": 0.569924334317115,
+        "ratio": 0.5139275173285824
+      },
+      {
+        "step": 9042,
+        "dist_to_origin": 2.2915511529279664e-07,
+        "ratio": 0.5654387788516716
+      },
+      {
+        "step": 15000,
+        "dist_to_origin": 1.7925858126435235e-111,
+        "ratio": 0.6063960351896771
+      }
+    ]
+  },
+  "experiment_5": {
+    "d": 4,
+    "exponent": 0.9325963557730105
+  },
+  "experiment_6": {
+    "rows": [
+      [
+        "Hessian, branch='A' (A free, on {B=0} plane, codim m=4)",
+        2.0,
+        0.8
+      ],
+      [
+        "Hessian, branch='B' (B free, on {A=0} plane, codim n=1)",
+        0.5,
+        0.2
+      ],
+      [
+        "Hessian, multi-restart min-codim (20 restarts)",
+        0.5,
+        0.2
+      ]
+    ],
+    "lambda_true": 0.5,
+    "ratio_true": 0.2,
+    "codims": [
+      1,
+      1,
+      1,
+      4,
+      1,
+      1,
+      4,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  }
+}
