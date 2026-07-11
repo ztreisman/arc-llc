@@ -23,9 +23,10 @@ an internal inconsistency in the original spec's ground-truth formula, several
 implementation bugs found and fixed along the way (a log-multiplicity bias in the
 volume estimator, an unstable SGLD step schedule, branch-dependence in the Hessian
 estimator and a multi-restart fix for it), discussion of experiments 4-6, and the DDS
-validation (experiments 7-8: the core rate/structural-correlation claim holds exactly;
-cross-cell magnitude-tracking is a harder, more protocol-sensitive story, reported
-honestly rather than smoothed over).
+validation (experiments 7-9: the core rate/structural-correlation claim holds exactly on
+our r=1 toy models and on an L-layer deep-linear bridge; cross-cell magnitude-tracking
+is a harder, more protocol-sensitive story, reported honestly rather than smoothed
+over).
 
 ## Quickstart
 
@@ -34,7 +35,7 @@ pip install torch numpy scipy matplotlib
 python3 main.py
 ```
 
-Runs all 8 experiments (~7-9 minutes), prints result tables, and writes:
+Runs all 9 experiments (~8-9 minutes), prints result tables, and writes:
 - `plots/*.png` — volume-scaling and SGLD free-energy fits, the training-trajectory
   ratio plot, and the arc-direction distribution
 - `results/summary.json`, `results/tables.md` — machine-readable and Markdown results
@@ -47,7 +48,8 @@ Runs all 8 experiments (~7-9 minutes), prints result tables, and writes:
 | `estimators.py` | `volume_scaling_estimator`, `hessian_branch_estimator`, `hessian_multi_restart_estimator`, `sgld_llc_estimator`, `arc_direction_estimator` |
 | `dds.py` | Dead-Direction Signatures: activation/Fisher-Gram spectral observables |
 | `rrr_model.py` | Aoyagi-Watanabe reduced-rank-regression model (general truth rank r0), external closed-form RLCT |
-| `experiments.py` | Experiments 1-8 and table formatting |
+| `deep_linear.py` | L-layer deep-linear "noisy bridge" (DDS's own rank-multiplicative counting-identity testbed) |
+| `experiments.py` | Experiments 1-9 and table formatting |
 | `plots.py` | Plotting utilities |
 | `main.py` | Runs everything, saves plots + results |
 | `RESULTS.md` | Full write-up of findings, corrections, and caveats |

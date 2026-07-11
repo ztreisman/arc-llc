@@ -250,11 +250,66 @@ Our simplified, non-calibrated reproduction landing in that same "noisy sanity g
 regime for the Fisher-side observables — while its core *rate* claim is exact — seems
 like the honest expected outcome, not evidence the method is wrong.
 
-**Bottom line on DDS**: the rate/structural-correlation claim (their most fundamental,
-most falsifiable prediction) is validated exactly on our toy models. The cross-cell
-magnitude-comparison claim needs either their full calibration protocol or a genuinely
-deeper/wider network (to get past a "sanity gate" that even naive proxies clear) to be
-discriminating — see "next steps" below.
+**Bottom line on DDS (experiments 7-8)**: the rate/structural-correlation claim (their
+most fundamental, most falsifiable prediction) is validated exactly on our toy models.
+The cross-cell magnitude-comparison claim needs either their full calibration protocol
+or a genuinely deeper/wider network (to get past a "sanity gate" that even naive
+proxies clear) to be discriminating — which motivated experiment 9.
+
+## Experiment 9: the rank-multiplicative counting identity (deep-linear noisy bridge)
+
+The DDS paper's own most *discriminating* claim (not just a sanity-gate rank
+correlation) is the rank-multiplicative volume identity: at a singular point with `r`
+simultaneously-dead directions, `log_det_plus(G)`'s slope (vs log distance-to-the-
+singular-set) is exactly `r` times the rank-1 slope, while `lambda_plus_min(G)`'s slope
+is r-invariant — a genuine "counting" signal no single-eigenvalue monitor can produce.
+Testing this needs layer width >= 2 dead directions at once; none of experiments 1-8
+can touch it (bottleneck width 1 throughout). Code: `deep_linear.py`.
+
+Construction: an L-layer deep-linear network (`y = W_L(...(W_1 x))`), each `W_i` a
+D x D matrix, teacher `M* = diag(1,...,1,0,...,0)` with the last r entries zero (r
+simultaneous dead directions) — the paper's own "noisy bridge" testbed (their Sec.
+4.2 / App. B.8.2). Every layer is diagonal, `diag(1,...,1,tau,...,tau)`, with r copies
+of a *shared* value `tau` on the dead coordinates: as `tau -> 0` the product converges
+to `M*` exactly. This directly generalizes the L=2 approach validated in experiment 7
+(one shrinking factor) to L layers and r simultaneous dead directions, and per-sample
+Fisher-Gram at each internal layer is computed via the exact same closed-form backprop
+formula already validated in `dds.py` (`delta_ell = delta_L @ P_{ell+1:L}`, downstream
+weight-matrix products — no autograd needed, no training loop, no convergence-criterion
+tuning). Swept over D=20, L in {4,6,8}, r in {1,2,3,4}, tau in [1, 1e-3].
+
+**Result**: exact agreement, at every (L, layer) combination tested — `log_det_plus`
+slope ratio = r to 4 decimal places (2.0000, 3.0000, 4.0000 for r=2,3,4), zero
+variance across configurations; `lambda_plus_min` slope ratio = 1.0000 exactly,
+r-invariant as predicted.
+
+**Two things worth being upfront about, so this isn't overclaimed:**
+
+1. **The exact match is expected, not a surprising discovery.** Because all r dead
+   coordinates are literally identical by construction (same shared `tau`), the r
+   eigenvalues they produce are numerically identical, so `log_det_plus` (which sums
+   log-eigenvalues) is *necessarily* r times the single-eigenvalue value, and
+   `lambda_plus_min` (which reads whichever eigenvalue is smallest) is *necessarily*
+   unaffected by how many identical copies there are. This construction validates that
+   our implementation is bug-free and that the underlying math is self-consistent — the
+   same role the paper's own "canonical bridge, analytic limit" tests play (their
+   ρ=+1.000 exact results) — but it is not an independent empirical stress-test the way
+   their actual noisy-SGD-trained bridge experiments are. A stronger test would use r
+   *independent*, non-identical dead directions with real training noise (their own
+   protocol: full/mini-batch SGD, 5 seeds, canonical-aligned init); that's a natural
+   next increment if this needs to be load-bearing rather than illustrative.
+2. **Our absolute per-layer rate exponents don't match the paper's stated `2(L-ell)`
+   formula.** We independently derive and confirm (empirically, exactly) that our
+   construction gives slope `4L - 2*ell` for `lambda_plus_min(G_ell)` — both formulas
+   decrease by exactly 2 per layer (same qualitative ladder), but ours is offset by a
+   constant `2L`. This traces to a genuine difference in construction: their paper
+   states the canonical-aligned approach as `W_ell(t) = W*_ell + t*delta_ell` (a
+   generic linear-in-t perturbation of every layer around some target `W*`), which we
+   don't have enough detail to reproduce exactly; our "every layer shares the same
+   `tau`, and the *product* converges to `M*`" scheme is a different (but equally
+   principled) canonical-aligned construction that happens to have the same per-layer
+   *pattern* but a different absolute calibration. The relative/counting claim (the
+   actual discriminator) doesn't depend on this and is confirmed regardless.
 
 ## Connection to the stated larger goal (GNN / ring-5 barrier)
 

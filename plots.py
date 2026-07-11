@@ -172,3 +172,29 @@ def plot_dds_cross_cell(exp8, out_path):
     fig.tight_layout()
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
+
+
+def plot_deep_linear_counting(exp9, out_path):
+    rs = exp9["rs"]
+    ratio_summary = exp9["ratio_summary"]
+
+    fig, ax = plt.subplots(figsize=(5.5, 4.5))
+    xs = [1] + [r for r in rs if r != 1]
+    ys_logdet = [1.0] + [ratio_summary[r]["log_det_plus_ratio_mean"] for r in rs if r != 1]
+    ys_lam = [1.0] + [ratio_summary[r]["lambda_plus_min_ratio_mean"] for r in rs if r != 1]
+
+    ax.plot(rs, rs, "--", color="gray", label="predicted y=r (log_det_plus)")
+    ax.plot(xs, ys_logdet, "o-", ms=8, color="C0", label="log_det_plus(G) slope ratio (counts r)")
+    ax.plot(xs, ys_lam, "s-", ms=8, color="C3", label="lambda_plus_min(G) slope ratio (rank-blind)")
+    ax.axhline(1.0, color="C3", ls=":", alpha=0.5)
+
+    ax.set_xlabel("rank-deficit r (number of simultaneously-dead directions)")
+    ax.set_ylabel("slope ratio (vs r=1)")
+    ax.set_title(exp9["tag"] +
+                  "\n(closed-form, symmetric construction: log_det_plus=r is a\n"
+                  "mathematical necessity here, not an independent empirical test --\n"
+                  "see RESULTS.md)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)

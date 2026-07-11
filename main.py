@@ -97,6 +97,17 @@ def main():
         "n_cells": len(e8["cells"]),
     }
 
+    print("\nRunning Experiment 9 (deep-linear noisy bridge, rank-multiplicative counting identity)...")
+    e9 = ex.experiment_9()
+    plots.plot_deep_linear_counting(e9, "plots/exp9_deep_linear_counting.png")
+    print("  Slope ratio vs r=1 (predicted log_det_plus=r, lambda_plus_min=1):")
+    for r, s in e9["ratio_summary"].items():
+        print(f"    r={r}: log_det_plus_ratio={s['log_det_plus_ratio_mean']:.4f} "
+              f"+/- {s['log_det_plus_ratio_std']:.4f}, "
+              f"lambda_plus_min_ratio={s['lambda_plus_min_ratio_mean']:.4f} "
+              f"+/- {s['lambda_plus_min_ratio_std']:.4f}")
+    summary["experiment_9"] = {"ratio_summary": e9["ratio_summary"], "Ls": e9["Ls"], "rs": e9["rs"]}
+
     with open("results/summary.json", "w") as f:
         json.dump(summary, f, indent=2, default=lambda o: float(o) if isinstance(o, np.floating) else str(o))
 

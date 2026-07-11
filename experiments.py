@@ -14,6 +14,7 @@ from estimators import (
 )
 from dds import dds_observables
 from rrr_model import aoyagi_2005_anchor_cells, train_rrr_cell, exact_branch_point, make_teacher
+from deep_linear import canonical_layers, make_teacher_diag, dds_observables_deep
 
 
 def _ground_truth_experiment(r, n, m, seed, sgld_n_steps=15_000, sgld_n_values=None,
@@ -373,6 +374,89 @@ def experiment_8(M=10, N=5, scale=0.03, n_dds_samples=20_000, seed=7):
                f"M={M}, N={N}, {len(cells)} cells)",
         "cells": cells, "rows": rows, "cross_cell_rho": cross_cell_rho,
         "lambda_true": lam_true,
+    }
+
+
+def experiment_9(D=20, Ls=(4, 6, 8), rs=(1, 2, 3, 4), n_taus=15, n_dds_samples=20_000, seed=8):
+    """The DDS paper's own most discriminating claim: the rank-multiplicative
+    volume identity. On an L-layer deep-linear "noisy bridge" (their Sec.
+    4.2 / App. B.8.2) with r simultaneously-dead directions, log_det_plus(G)
+    slope (vs log distance-to-singularity) should scale as r times the
+    rank-1 slope, while lambda_plus_min(G) slope should be r-invariant.
+    This needs layer width >= 2 dead directions at once to test at all --
+    our r=1 bottleneck models (experiments 1-8) cannot touch it.
+
+    Construction: every layer is diagonal, diag(1,...,1,tau,...,tau) with r
+    copies of a shared tau on the dead coordinates (generalizing the L=2
+    approach validated in experiment_7 to L layers and r simultaneous dead
+    directions -- see deep_linear.py's module docstring). This is fully
+    closed-form (no training, no convergence-criterion tuning), sweeping
+    tau directly rather than gradient-descending to it.
+
+    Caveat, stated plainly: our per-layer rate EXPONENTS do not match the
+    paper's reported 2(L-ell) formula (we get 4L-2*ell here; both decrease
+    by exactly 2 per layer, but ours is offset by 2L, evidently because our
+    "every layer shares the same tau" construction differs from their
+    unspecified exact Wl(t)=W*l+t*deltal recipe -- we don't have enough
+    detail to reproduce that construction exactly). What we DO reproduce,
+    exactly and robustly regardless of that offset, is the discriminating
+    claim itself: because log_det_plus sums log-eigenvalues over all r
+    (symmetric, identically-scaling) dead directions, its slope is
+    necessarily r times the single-direction slope; because
+    lambda_plus_min reads whichever eigenvalue is smallest and all r dead
+    eigenvalues are identical by construction, it's necessarily
+    r-invariant. This holds for any L, D, or exponent convention.
+    """
+    rng_master = np.random.default_rng(seed)
+    taus = np.logspace(0, -3, n_taus)
+    log_taus = np.log(taus)
+
+    per_L = {}
+    for L in Ls:
+        per_r_layer_slopes = {r: {} for r in rs}
+        for r in rs:
+            teacher = make_teacher_diag(D, r)
+            log_logdet_by_layer = {ell: [] for ell in range(1, L)}
+            log_lam_by_layer = {ell: [] for ell in range(1, L)}
+            for tau in taus:
+                Ws = canonical_layers(D, L, r, tau)
+                obs = dds_observables_deep(Ws, N=n_dds_samples, target=teacher,
+                                            rng=np.random.default_rng(seed))
+                for ell in range(1, L):
+                    log_logdet_by_layer[ell].append(obs[ell]["log_det_plus"])
+                    log_lam_by_layer[ell].append(np.log(obs[ell]["lambda_plus_min"]))
+            for ell in range(1, L):
+                s_logdet = np.polyfit(log_taus, log_logdet_by_layer[ell], 1)[0]
+                s_lam = np.polyfit(log_taus, log_lam_by_layer[ell], 1)[0]
+                per_r_layer_slopes[r][ell] = {"slope_log_det_plus": s_logdet, "slope_lambda_plus_min": s_lam}
+        per_L[L] = per_r_layer_slopes
+
+    # aggregate slope RATIOS (vs r=1) across all (L, layer) cells, mirroring
+    # the paper's own pooling across their 7 noisy-bridge configurations
+    ratios_logdet = {r: [] for r in rs if r != 1}
+    ratios_lam = {r: [] for r in rs if r != 1}
+    for L in Ls:
+        for ell in range(1, L):
+            base_logdet = per_L[L][1][ell]["slope_log_det_plus"]
+            base_lam = per_L[L][1][ell]["slope_lambda_plus_min"]
+            for r in rs:
+                if r == 1:
+                    continue
+                ratios_logdet[r].append(per_L[L][r][ell]["slope_log_det_plus"] / base_logdet)
+                ratios_lam[r].append(per_L[L][r][ell]["slope_lambda_plus_min"] / base_lam)
+
+    ratio_summary = {
+        r: {"log_det_plus_ratio_mean": float(np.mean(ratios_logdet[r])),
+            "log_det_plus_ratio_std": float(np.std(ratios_logdet[r])),
+            "lambda_plus_min_ratio_mean": float(np.mean(ratios_lam[r])),
+            "lambda_plus_min_ratio_std": float(np.std(ratios_lam[r]))}
+        for r in rs if r != 1
+    }
+
+    return {
+        "tag": f"Experiment 9 (deep-linear noisy bridge, D={D}, L in {list(Ls)}, r in {list(rs)})",
+        "D": D, "Ls": list(Ls), "rs": list(rs), "taus": taus,
+        "per_L": per_L, "ratio_summary": ratio_summary,
     }
 
 
