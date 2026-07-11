@@ -219,5 +219,24 @@
       1,
       1
     ]
+  },
+  "experiment_7": {
+    "lambda_true": 1.0,
+    "rho_structural_analytic": 1.0,
+    "slope_lam_h1": 2.0000000000000004,
+    "slope_sigma_h1": 2.0000000000000004,
+    "rho_structural_trajectory": 1.0,
+    "rho_h1_h2_trajectory": 1.0
+  },
+  "experiment_8": {
+    "cross_cell_rho": {
+      "lambda_plus_min_h1": 0.2882289972957653,
+      "lambda_plus_min_h2": 0.46864714827479403,
+      "log_det_plus_h1": 0.06380641924868087,
+      "log_det_plus_h2": 0.028602877594236253,
+      "sigma_min_h1": 0.20902102857326493,
+      "sigma_min_h2": 0.6908695049684758
+    },
+    "n_cells": 14
   }
 }

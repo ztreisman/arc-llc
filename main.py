@@ -69,6 +69,34 @@ def main():
                                 "ratio_true": e6["ratio_true"],
                                 "codims": e6["multi"]["codims"].tolist()}
 
+    print("\nRunning Experiment 7 (DDS validation on r=1 toy models)...")
+    e7 = ex.experiment_7()
+    plots.plot_dds_validation(e7, "plots/exp7_dds_validation.png")
+    a = e7["analytic"]
+    print(f"  analytic-limit: rho_structural={a['rho_structural']:.4f}, "
+          f"slope_lam_h1={a['slope_lam_h1']:.3f} (predicted 2), "
+          f"slope_sigma_h1={a['slope_sigma_h1']:.3f} (predicted 2)")
+    print(f"  real trajectory: rho(lam_h1,sigma_h1)={e7['rho_structural_trajectory']:.4f}, "
+          f"rho(h1,h2)={e7['rho_h1_h2_trajectory']:.4f} (both layers collapse together, r0=0)")
+    summary["experiment_7"] = {
+        "lambda_true": e7["lambda_true"],
+        "rho_structural_analytic": a["rho_structural"],
+        "slope_lam_h1": a["slope_lam_h1"], "slope_sigma_h1": a["slope_sigma_h1"],
+        "rho_structural_trajectory": e7["rho_structural_trajectory"],
+        "rho_h1_h2_trajectory": e7["rho_h1_h2_trajectory"],
+    }
+
+    print("\nRunning Experiment 8 (DDS cross-cell rank-tracking, Aoyagi 2005 anchor)...")
+    e8 = ex.experiment_8()
+    plots.plot_dds_cross_cell(e8, "plots/exp8_dds_cross_cell.png")
+    print("  Cross-cell Spearman rho vs true lambda:")
+    for name, rho in e8["cross_cell_rho"].items():
+        print(f"    {name}: {rho:.3f}")
+    summary["experiment_8"] = {
+        "cross_cell_rho": e8["cross_cell_rho"],
+        "n_cells": len(e8["cells"]),
+    }
+
     with open("results/summary.json", "w") as f:
         json.dump(summary, f, indent=2, default=lambda o: float(o) if isinstance(o, np.floating) else str(o))
 

@@ -111,3 +111,64 @@ def plot_training_trajectory(exp4, out_path):
     fig.tight_layout()
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
+
+
+def plot_dds_validation(exp7, out_path):
+    a = exp7["analytic"]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    ax = axes[0]
+    ax.plot(a["log_t"], a["log_lam_h1"], "o-", ms=3, label=f"log lambda+_min(G_h1), slope={a['slope_lam_h1']:.2f}")
+    ax.plot(a["log_t"], a["log_sigma_h1_sq"], "s-", ms=3, label=f"log sigma_min(X_h1)^2, slope={a['slope_sigma_h1']:.2f}")
+    ax.plot(a["log_t"], a["log_lam_h2"], "^-", ms=3, label=f"log lambda+_min(G_h2), slope={a['slope_lam_h2']:.2f}")
+    ax.set_xlabel("log t (distance to {B=0} branch)")
+    ax.set_ylabel("log observable")
+    ax.set_title(f"Analytic-limit rate check\nstructural correlation rho={a['rho_structural']:.4f}")
+    ax.legend(fontsize=8)
+
+    traj = exp7["trajectory_dds"]
+    steps = [c["step"] for c in traj]
+    lam_h1 = [c["lambda_plus_min_h1"] for c in traj]
+    lam_h2 = [c["lambda_plus_min_h2"] for c in traj]
+    sigma_h1 = [c["sigma_min_h1"] for c in traj]
+
+    ax2 = axes[1]
+    ax2.loglog(steps, lam_h1, "o-", ms=3, label="lambda+_min(G_h1)")
+    ax2.loglog(steps, lam_h2, "^-", ms=3, label="lambda+_min(G_h2)")
+    ax2.loglog(steps, np.array(sigma_h1) ** 2, "s-", ms=3, label="sigma_min(X_h1)^2")
+    ax2.set_xlabel("training step")
+    ax2.set_ylabel("observable value (log scale)")
+    ax2.set_title(f"Real GD trajectory (both layers collapse together)\n"
+                   f"rho(h1,sigma_h1)={exp7['rho_structural_trajectory']:.3f}, "
+                   f"rho(h1,h2)={exp7['rho_h1_h2_trajectory']:.3f}")
+    ax2.legend(fontsize=8)
+
+    fig.suptitle(exp7["tag"])
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
+def plot_dds_cross_cell(exp8, out_path):
+    rows = exp8["rows"]
+    lam_true = exp8["lambda_true"]
+    observables = ["lambda_plus_min_h2", "log_det_plus_h2", "sigma_min_h2"]
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    for ax, name in zip(axes, observables):
+        vals = np.array([r[name] for r in rows])
+        rho = exp8["cross_cell_rho"][name]
+        for r, v in zip(rows, vals):
+            ax.scatter(r["lambda_true"], v, c=f"C{r['H']-2}", s=40)
+        ax.set_yscale("log" if (vals > 0).all() else "linear")
+        ax.set_xlabel("analytical Aoyagi lambda")
+        ax.set_ylabel(name)
+        ax.set_title(f"{name}\nrho={rho:.3f}")
+
+    handles = [plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=f"C{h-2}",
+                           label=f"H={h}", markersize=8) for h in [2, 3, 4, 5]]
+    axes[-1].legend(handles=handles, fontsize=8, loc="best")
+    fig.suptitle(exp8["tag"])
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)

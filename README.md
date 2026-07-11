@@ -9,9 +9,12 @@ coefficient (LLC) on a small, analytically tractable singular statistical model:
    inverse temperature β = 1/log(n) and read λ off the slope of the free energy vs
    log(n).
 
-Both are validated against a **volume-scaling estimator** and against ground truth on
-rank-1 matrix factorization with true rank 0 (K(A,B) = ||AB||_F², true distribution =
-zero matrix), where λ is known analytically: λ = min(n,m)/2 for r=1.
+Both are validated against a **volume-scaling estimator** and, more recently, against
+**Dead-Direction Signatures** (Shirodkar & Narayanan, arXiv:2606.21158) — a family of
+cheap closed-form spectral reads of a network's activations and per-sample-gradient
+Fisher-Gram — plus ground truth on rank-1 matrix factorization with true rank 0
+(K(A,B) = ||AB||_F², true distribution = zero matrix), where λ is known analytically:
+λ = min(n,m)/2 for r=1.
 
 The geometric estimators are motivated by Mustață's jet-scheme characterization of log canonical thresholds (arXiv:math/0102201): the RLCT is determined by dimensions of contact loci in arc space, and the Hessian null space computes the first-order contact data. The longer-term question is whether higher-order jet/contact statistics yield cheaper or more informative LLC estimators than sampling-based methods.
 
@@ -19,7 +22,10 @@ See [`RESULTS.md`](RESULTS.md) for the full write-up — headline numbers, a cor
 an internal inconsistency in the original spec's ground-truth formula, several
 implementation bugs found and fixed along the way (a log-multiplicity bias in the
 volume estimator, an unstable SGLD step schedule, branch-dependence in the Hessian
-estimator and a multi-restart fix for it), and discussion of experiments 4-6.
+estimator and a multi-restart fix for it), discussion of experiments 4-6, and the DDS
+validation (experiments 7-8: the core rate/structural-correlation claim holds exactly;
+cross-cell magnitude-tracking is a harder, more protocol-sensitive story, reported
+honestly rather than smoothed over).
 
 ## Quickstart
 
@@ -28,7 +34,7 @@ pip install torch numpy scipy matplotlib
 python3 main.py
 ```
 
-Runs all 6 experiments (~8-9 minutes), prints result tables, and writes:
+Runs all 8 experiments (~7-9 minutes), prints result tables, and writes:
 - `plots/*.png` — volume-scaling and SGLD free-energy fits, the training-trajectory
   ratio plot, and the arc-direction distribution
 - `results/summary.json`, `results/tables.md` — machine-readable and Markdown results
@@ -39,7 +45,9 @@ Runs all 6 experiments (~8-9 minutes), prints result tables, and writes:
 |---|---|
 | `model.py` | The K(w) = \|\|AB\|\|² loss (numpy + torch), gradient/Hessian utilities, analytic ground truth |
 | `estimators.py` | `volume_scaling_estimator`, `hessian_branch_estimator`, `hessian_multi_restart_estimator`, `sgld_llc_estimator`, `arc_direction_estimator` |
-| `experiments.py` | Experiments 1-6 and table formatting |
+| `dds.py` | Dead-Direction Signatures: activation/Fisher-Gram spectral observables |
+| `rrr_model.py` | Aoyagi-Watanabe reduced-rank-regression model (general truth rank r0), external closed-form RLCT |
+| `experiments.py` | Experiments 1-8 and table formatting |
 | `plots.py` | Plotting utilities |
 | `main.py` | Runs everything, saves plots + results |
 | `RESULTS.md` | Full write-up of findings, corrections, and caveats |

@@ -165,6 +165,97 @@ dominated by the smaller codim, i.e. min(n,m)/2 = lambda again. Fitted exponent 
 experiment 5 (n=m=2): **0.933**, matching the predicted 1.0 within Monte Carlo noise —
 an independent (fifth) confirmation of the corrected ground truth.
 
+## Experiments 7-8: Dead-Direction Signatures (Shirodkar & Narayanan, 2606.21158)
+
+DDS is a family of cheap, closed-form spectral estimators of the RLCT, reading a
+network's activations and per-sample-gradient Fisher-Gram at a chosen layer instead of
+running an SGLD posterior chain. Three observables: `sigma_min(X_ell)` (smallest
+activation singular value), `lambda_plus_min(G_ell)` (smallest strictly-positive
+Fisher-Gram eigenvalue), `log_det_plus(G_ell)` (active-spectrum log-volume). Our
+K(w) = ||AB||_F^2 model already **is** the two-layer linear network these observables
+are read from (x -> hidden=Bx [layer "h1"] -> output=A(Bx) [layer "h2"], zero teacher)
+— no new model was needed for the first validation pass. Code: `dds.py`.
+
+### Experiment 7: the core claim holds exactly on our toy models
+
+DDS's central theorem (structural correlation: `lambda_plus_min(G) ~ sigma_min(X)^2`,
+both decaying as powers of t approaching a singular point) was tested two ways:
+
+1. **Analytic-limit rate check** — approach the `{B=0}` branch along a fixed transverse
+   direction, t -> 0. Result: `rho(lambda_plus_min(G_h1), sigma_min(X_h1)^2) = 1.0000`
+   exactly, with both quantities decaying at the predicted rate (slope 2.00 vs
+   predicted 2), matching the DDS paper's own reported analytic-limit result
+   (rho = +1.000 on their canonical L=2 bridge) almost verbatim.
+2. **Real noisy GD trajectory** (reusing experiment 4's ridge-regularized run) — same
+   structural correlation, `rho = 1.0000`, holding even off the clean single-direction
+   approach.
+
+**A genuine, explainable difference from the paper's own results, surfaced rather than
+smoothed over**: in both tests, layers h1 (bottleneck) and h2 (output) collapse at the
+*same* rate (`rho(h1, h2) = 1.0000`), whereas the DDS paper reports h1 collapsing while
+h2 ("the dimension-fixed boundary layer") stays flat (their Fig. 2, ~246x collapse at
+h1, <0.3% drift at h2). The difference traces to truth rank: our toy models all have
+**truth rank r0 = 0** (the teacher is the zero matrix), so the *entire* map — both
+layers — must vanish at the true optimum; there is no surviving nonzero signal for h2
+to carry. The paper's own anchor uses r0 >= 1, where the output layer represents that
+real, non-vanishing signal while only the *excess* bottleneck capacity dies. This is
+directly testable, and motivated experiment 8.
+
+### Experiment 8: cross-cell rank-tracking (r0 >= 1 required)
+
+To test the r0 >= 1 regime, and because our own r>1 RLCT formula is unverified (see the
+"Correction to the source spec" section above), we reused the DDS paper's own **exact**
+14-cell Aoyagi 2005 anchor (M=10, N=5, H in {2,3,4,5}, truth rank r0 in {1,...,min(N,H)},
+Case-3 closed form λ=(NH+M·r0−H·r0)/2 — an external, independently-published ground
+truth, cross-checked here against our own verified r0=0 result within its validity
+region). Code: `rrr_model.py`.
+
+Getting a *comparable reference point* across 14 differently-sized cells turned out to
+be the hard part, and is worth documenting since it's a real methodological trap:
+
+- **Training to a convergence criterion doesn't work cleanly.** When H > r0, the
+  solution set `{(W1,W2) : W2 W1 = M*}` is itself a positive-dimensional manifold (the
+  H-r0 excess bottleneck directions can rotate/rescale freely), so plain gradient
+  descent has no reason to drive the excess directions to zero specifically — it
+  converges to *some* point on that manifold, and all H bottleneck directions end up
+  with comparably tiny (not cleanly separated) Fisher eigenvalues. A small ridge
+  penalty (matching experiment 4's fix) selects the minimum-norm point and does
+  separate them — but tuning training length against ridge strength is delicate: too
+  little training under-converges; enough additional training under ridge eventually
+  shrinks the *genuine* r0 directions too, undoing the separation. Fixed step counts
+  also left `final_K` spanning ~100x across cells regardless, adding convergence-level
+  noise on top.
+- **The fix**: construct the reference point directly (`exact_branch_point`), exactly
+  as `sample_on_branch` did for the r=1 model — the exact minimum-norm factorization of
+  M* plus a small controlled transverse perturbation, no training loop at all. A second
+  trap surfaced here too: perturbing every weight by the same *per-element* scale pumps
+  more aggregate perturbation into larger-H cells purely from having more entries,
+  producing a spurious cell-size-driven correlation; normalizing to a fixed *total*
+  Frobenius norm removes it.
+
+**Result, honestly mixed rather than forced into a clean story**: the activation-side
+`sigma_min(X_h2)` robustly reproduces the paper's own cross-cell sign and rough
+magnitude (rho = 0.69-0.80 across perturbation scales here vs their +0.895 — same
+sign, comparable order of magnitude). The Fisher-side rate/volume observables
+(`lambda_plus_min`, `log_det_plus`) gave weak, unstable cross-cell correlations
+(rho ~ 0.03-0.47) in this simplified protocol — notably *not* matching the paper's
+strong `-0.978`/`-0.947` readings, even though those exact observables validated
+*perfectly* (rho=1.0) in experiment 7's single-trajectory test. We did not chase this
+further: the DDS paper's own appendix (App. B.4-B.6) devotes several pages to
+numerical-recipe sensitivity in exactly this cross-cell reading (fp32 vs fp64,
+Tikhonov vs no-Tikhonov, per-cell-locked SGLD calibration, n/d>=100 sample-budget
+gates), and frames this specific test as a "sanity gate, not a discriminator" even in
+their own results (a naive `H*r` capacity proxy clears the same bar in their Fig. 3).
+Our simplified, non-calibrated reproduction landing in that same "noisy sanity gate"
+regime for the Fisher-side observables — while its core *rate* claim is exact — seems
+like the honest expected outcome, not evidence the method is wrong.
+
+**Bottom line on DDS**: the rate/structural-correlation claim (their most fundamental,
+most falsifiable prediction) is validated exactly on our toy models. The cross-cell
+magnitude-comparison claim needs either their full calibration protocol or a genuinely
+deeper/wider network (to get past a "sanity gate" that even naive proxies clear) to be
+discriminating — see "next steps" below.
+
 ## Connection to the stated larger goal (GNN / ring-5 barrier)
 
 The volume-scaling estimator is the one to carry forward to a real network: it only

@@ -1,5 +1,7 @@
 """Experiments 1-6 from arc_llc_context.md (experiment 6 added: asymmetric
-n != m, testing the multi-restart min-codim fix to the Hessian estimator)."""
+n != m, testing the multi-restart min-codim fix to the Hessian estimator).
+Experiment 7 adds Dead-Direction Signatures (Shirodkar & Narayanan 2606.21158)
+as a further estimator, validated on the same r=1 toy models."""
 import numpy as np
 
 from model import (
@@ -10,6 +12,8 @@ from estimators import (
     hessian_multi_restart_estimator,
     sgld_llc_estimator, arc_direction_estimator,
 )
+from dds import dds_observables
+from rrr_model import aoyagi_2005_anchor_cells, train_rrr_cell, exact_branch_point, make_teacher
 
 
 def _ground_truth_experiment(r, n, m, seed, sgld_n_steps=15_000, sgld_n_values=None,
@@ -214,6 +218,161 @@ def experiment_6(seed=5, r=1, n=1, m=4, n_init=20):
         "r": r, "n": n, "m": m, "d": d,
         "lambda_true": lam_true, "ratio_true": lam_true / (d / 2),
         "rows": rows, "hess_A": hess_A, "hess_B": hess_B, "multi": multi,
+    }
+
+
+def experiment_7(seed=6, r=1, n=2, m=2, n_dds_samples=20_000):
+    """Dead-Direction Signatures (DDS), validated on the same r=1 toy model.
+
+    Our K(w) = ||AB||_F^2 model IS the two-layer linear network DDS reads
+    (x -> hidden=Bx [layer "h1", the bottleneck] -> output=A(Bx) [layer
+    "h2"]) with a zero teacher, so no new model is needed for this part.
+
+    Two checks, mirroring the paper's own validation structure:
+    (a) Analytic-limit rate check: approach the {B=0} branch along a fixed
+        transverse direction (A fixed, B=t*B_dir, t -> 0) and confirm the
+        predicted Theorem-2 structural correlation
+        rho(lambda_plus_min(G_h1), sigma_min(X_h1)^2) -> +1, plus the
+        predicted rate exponents.
+    (b) The same readout along the real (noisy, ridge-regularized) GD
+        trajectory from experiment_4, checking whether h1 and h2 collapse
+        together or separately.
+
+    Important finding surfaced here, not hidden: h1 and h2 collapse at THE
+    SAME rate in our r0=0 (true rank zero) toy models, unlike the DDS
+    paper's own r0>0 anchor where the boundary layer h2 stays flat while
+    only the bottleneck h1 collapses. This is a real structural difference,
+    not a bug: with truth rank 0, the entire map (both layers) must vanish
+    at the true optimum, so there is no "surviving signal" for h2 to carry.
+    See RESULTS.md for discussion.
+    """
+    rng = np.random.default_rng(seed)
+    d = dim_w(r, n, m)
+    lam_true = true_lambda(r, n, m)
+
+    # --- (a) analytic-limit rate check, approaching the {B=0} branch ---
+    A_dir = rng.standard_normal((n, r))
+    B_dir = rng.standard_normal((r, m))
+    ts = np.logspace(0, -4, 25)
+    log_lam_h1, log_sigma_h1_sq, log_lam_h2, log_sigma_h2_sq = [], [], [], []
+    for t in ts:
+        B = t * B_dir
+        obs = dds_observables(A_dir, B, N=n_dds_samples, rng=np.random.default_rng(seed))
+        log_lam_h1.append(np.log(obs["lambda_plus_min_h1"]))
+        log_sigma_h1_sq.append(np.log(obs["sigma_min_h1"] ** 2))
+        log_lam_h2.append(np.log(obs["lambda_plus_min_h2"]))
+        log_sigma_h2_sq.append(np.log(max(obs["sigma_min_h2"], 1e-300) ** 2))
+
+    from scipy.stats import spearmanr
+    log_t = np.log(ts)
+    rho_structural, _ = spearmanr(log_lam_h1, log_sigma_h1_sq)
+    slope_lam_h1 = np.polyfit(log_t, log_lam_h1, 1)[0]
+    slope_sigma_h1 = np.polyfit(log_t, log_sigma_h1_sq, 1)[0]
+    slope_lam_h2 = np.polyfit(log_t, log_lam_h2, 1)[0]
+
+    analytic = {
+        "ts": ts, "log_t": log_t,
+        "log_lam_h1": np.array(log_lam_h1), "log_sigma_h1_sq": np.array(log_sigma_h1_sq),
+        "log_lam_h2": np.array(log_lam_h2),
+        "rho_structural": rho_structural,
+        "slope_lam_h1": slope_lam_h1, "slope_sigma_h1": slope_sigma_h1,
+        "slope_lam_h2": slope_lam_h2,
+    }
+
+    # --- (b) along the real GD+ridge trajectory (reuse experiment_4's setup) ---
+    traj4 = experiment_4(seed=seed, r=r, n=n, m=m)
+    traj_dds = []
+    for ckpt in traj4["trajectory"]:
+        w = ckpt["w"]
+        A = w[: r * n].reshape(n, r)
+        B = w[r * n :].reshape(r, m)
+        obs = dds_observables(A, B, N=n_dds_samples, rng=np.random.default_rng(seed))
+        traj_dds.append({
+            "step": ckpt["step"], "dist_to_origin": ckpt["dist_to_origin"],
+            "lambda_plus_min_h1": obs["lambda_plus_min_h1"],
+            "lambda_plus_min_h2": obs["lambda_plus_min_h2"],
+            "sigma_min_h1": obs["sigma_min_h1"],
+        })
+
+    # restrict to points where the bottleneck hasn't fully numerically
+    # vanished (log(0) is uninformative), matching the paper's own
+    # "measurable Phase A" precondition
+    valid = [c for c in traj_dds if c["lambda_plus_min_h1"] > 0 and c["sigma_min_h1"] > 0]
+    log_lam_h1_traj = np.log([c["lambda_plus_min_h1"] for c in valid])
+    log_sigma_h1_traj = np.log([c["sigma_min_h1"] ** 2 for c in valid])
+    log_lam_h2_traj = np.log([c["lambda_plus_min_h2"] for c in valid if c["lambda_plus_min_h2"] > 0])
+    rho_traj, _ = spearmanr(log_lam_h1_traj, log_sigma_h1_traj) if len(valid) >= 3 else (float("nan"), None)
+    rho_h1_h2_traj, _ = spearmanr(log_lam_h1_traj[:len(log_lam_h2_traj)], log_lam_h2_traj) \
+        if len(log_lam_h2_traj) >= 3 else (float("nan"), None)
+
+    return {
+        "tag": f"Experiment 7 (DDS validation, r={r},n={n},m={m},d={d})",
+        "d": d, "lambda_true": lam_true,
+        "analytic": analytic,
+        "trajectory_dds": traj_dds,
+        "rho_structural_trajectory": rho_traj,
+        "rho_h1_h2_trajectory": rho_h1_h2_traj,
+    }
+
+
+def experiment_8(M=10, N=5, scale=0.03, n_dds_samples=20_000, seed=7):
+    """Cross-cell DDS rank-tracking against closed-form RLCT, on the DDS
+    paper's own 14-cell Aoyagi 2005 anchor (M=10, N=5, H in {2,3,4,5},
+    truth rank r0 in {1,...,min(N,H)}), reusing their exact ground truth
+    rather than our own (unverified for H>1) formula.
+
+    Reference points are constructed directly via exact_branch_point
+    (minimum-norm exact fit + a small controlled transverse perturbation),
+    not by gradient descent: an earlier version of this experiment trained
+    each cell to a convergence criterion, but final_K varied ~100x across
+    cells despite matched hyperparameters, and made-up for that with ad
+    hoc ridge/step tuning that never cleanly separated the "genuine"
+    r0-dimensional signal from the "excess" (H-r0)-dimensional dead
+    directions (see train_rrr_cell's docstring). The direct construction
+    avoids that confound entirely.
+
+    Finding (see RESULTS.md for full discussion): the activation-side dual
+    sigma_min(X_h2) robustly reproduces the paper's own cross-cell sign and
+    rough magnitude (positive correlation with lambda, |rho| ~ 0.7-0.8 here
+    vs their +0.895). The Fisher-side rate/volume observables
+    (lambda_plus_min, log_det_plus) give weak/inconsistent cross-cell
+    correlations in this simplified, non-SGLD-calibrated protocol, even
+    though those same observables validated perfectly (rho=1.0) in
+    experiment_7's single-trajectory rate test. This is reported as a
+    genuine, protocol-sensitive finding, not resolved further here: the
+    DDS paper's own appendix (App B.4-B.6) devotes substantial space to
+    exactly this kind of numerical-recipe sensitivity for the cross-cell
+    reading, and it is explicitly framed there as a "sanity gate," not
+    their discriminating test (which requires H>=2 layers of *depth*, not
+    just bottleneck width -- see the "next steps" discussion).
+    """
+    cells = aoyagi_2005_anchor_cells(M=M, N=N)
+    rows = []
+    for i, cell in enumerate(cells):
+        H, r0 = cell["H"], cell["r0"]
+        rng = np.random.default_rng(seed + i)
+        W1, W2 = exact_branch_point(M, N, H, r0, scale=scale, rng=rng)
+        M_star = make_teacher(N, M, r0)
+        obs = dds_observables(W2, W1, N=n_dds_samples, target=M_star,
+                               rng=np.random.default_rng(seed + 1000 + i))
+        rows.append({**cell, **obs})
+
+    from scipy.stats import spearmanr
+    lam_true = np.array([r["lambda_true"] for r in rows])
+    observable_names = ["lambda_plus_min_h1", "lambda_plus_min_h2",
+                         "log_det_plus_h1", "log_det_plus_h2",
+                         "sigma_min_h1", "sigma_min_h2"]
+    cross_cell_rho = {}
+    for name in observable_names:
+        vals = np.array([r[name] for r in rows])
+        rho, _ = spearmanr(vals, lam_true)
+        cross_cell_rho[name] = rho
+
+    return {
+        "tag": f"Experiment 8 (DDS cross-cell rank-tracking, Aoyagi 2005 anchor, "
+               f"M={M}, N={N}, {len(cells)} cells)",
+        "cells": cells, "rows": rows, "cross_cell_rho": cross_cell_rho,
+        "lambda_true": lam_true,
     }
 
 

@@ -36,7 +36,7 @@ KL divergence (up to constants):
 W₀ = {w : K(w) = 0} = {(A,B) : AB = 0}
    = {A=0} ∪ {B=0}  (for r=1)
 
-This is a genuinely singular variety — two subspaces meeting at the origin.
+This is a singular variety: two subspaces meeting at the origin.
 
 ### Ground truth RLCT (known analytically)
 
@@ -61,7 +61,7 @@ At a true minimum w*:
 - dim(null H) is a lower bound on dim W₀
 
 From Mustață's formula, the RLCT is:
-  λ = lim_{m→∞} [n(m+1) - dim Contact_m] / m
+  λ = lim_{m→∞} [n(m+1) - dim Contact_m] / (m+1)
 
 where Contact_m = {arcs of order m tangent to W₀}.
 

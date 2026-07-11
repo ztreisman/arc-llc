@@ -1,0 +1,146 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tipa}
+
+\newtheorem{defn}{Definition}
+\newtheorem{thm}{Theorem}
+\newtheorem{prop}{Proposition}
+
+\title{DDS $\longleftrightarrow$ Arc Space: Correspondence to Verify}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\section*{Setup}
+
+Let $K : \mathbb{R}^d \to \mathbb{R}_{\geq 0}$ be the KL divergence (population loss),
+with $K(w^*) = 0$ at a trained parameter $w^*$.
+Write $W_0 = \{w : K(w) = 0\}$ for the singular set (solution locus).
+
+\bigskip
+
+\section*{Two Definitions of the Same Object}
+
+\begin{defn}[DDS, Shirodkar 2026]
+A unit direction $u \in \mathbb{R}^d$ is a \textbf{dead direction of KL order $k$} at $w^*$ if
+\[
+K(w^* + tu) = c\,t^{2k} + O(t^{2k+1}), \qquad c > 0.
+\]
+The Fisher information decays along $u$ as
+\[
+u^\top F(w^* + tu)\,u = \Theta(t^{2(k-1)}).
+\]
+\end{defn}
+
+\begin{defn}[Arc spaces / contact loci]
+The \textbf{$m$-th contact locus} of $K$ at $w^*$ is
+\[
+\operatorname{Contact}_m(K) = \bigl\{\,\gamma \in J_m(\mathbb{R}^d) \;\big|\;
+\operatorname{ord}_\gamma(K) \geq m+1\,\bigr\},
+\]
+where $J_m(\mathbb{R}^d)$ is the space of $m$-jets (arcs truncated to order $m$).
+A linear arc $\gamma(t) = w^* + tu$ satisfies $\operatorname{ord}_\gamma(K) \geq m+1$
+iff $K(w^* + tu) = O(t^{m+1})$.
+\end{defn}
+
+\bigskip
+
+\begin{prop}[The correspondence]
+A direction $u$ is a dead direction of KL order $k$
+if and only if
+the linear arc $\gamma(t) = w^* + tu$ lies in $\operatorname{Contact}^{2k-1}(K)$
+but not in $\operatorname{Contact}^{2k}(K)$.
+\end{prop}
+
+\begin{proof}
+By definition, $u$ has KL order $k$ iff $K(w^*+tu) = c\,t^{2k} + O(t^{2k+1})$ with $c>0$.
+This is equivalent to $\operatorname{ord}_\gamma(K) = 2k$,
+i.e.\ $\gamma \in \operatorname{Contact}^{2k-1}(K) \setminus \operatorname{Contact}^{2k}(K)$.
+\end{proof}
+
+\bigskip
+
+\section*{Two Formulas for the RLCT}
+
+\begin{thm}[DDS selection rule, Shirodkar 2026 Thm.~3]
+On smooth singular fibres, a dead direction of KL order $k$
+contributes directional RLCT
+\[
+\lambda_u = \frac{1}{2k}.
+\]
+The rate exponent $2(k-1)$ of Fisher decay recovers $\lambda_u$ via $\lambda_u = 1/(2 + \text{rate})$.
+\end{thm}
+
+\begin{thm}[Ein--Lazarsfeld--Musta\textcommabelow{t}\u{a}, arXiv:math/0303268]
+\[
+\lambda =  d - \sup_{m \geq 0}\frac{\dim \operatorname{Cont}^m(K)}{m+1}
+\]
+
+\end{thm}
+
+\bigskip
+
+\section*{Correspondence Table}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{p{6cm} p{6cm}}
+\toprule
+\textbf{DDS language} & \textbf{Arc-space language} \\
+\midrule
+Dead direction of KL order $k$ &
+Arc $\gamma(t) = w^*+tu$ in $\operatorname{Contact}_{2k-1}(K)$ \\
+Fisher decay rate $2(k-1)$ along $u$ &
+Contact order $2k-1$ of the arc \\
+Selection rule: rate $\mapsto$ RLCT &
+Musta\textcommabelow{t}\u{a}'s formula: $\operatorname{codim}(\operatorname{Contact}_m) \mapsto \lambda$ \\
+$\lambda_{\min}(F(w^*+tu)) \to 0$ as $t\to 0$ &
+Contact locus $\operatorname{Contact}_m(K)$ gaining dimension \\
+\bottomrule
+\end{tabular}
+
+\bigskip
+
+\section*{The Unifying Claim}
+
+The DDS selection rule $\lambda_u = 1/(2k)$ and Musta\textcommabelow{t}\u{a}'s formula
+are the same statement: a direction where $K$ vanishes to order $2k$
+contributes a directional log canonical threshold of $1/(2k)$.
+DDS reads this from the Fisher spectrum at one checkpoint.
+Musta\textcommabelow{t}\u{a} reads this from the dimension of the contact locus.
+
+\bigskip
+
+\section*{Things to Check by Hand}
+
+\begin{enumerate}
+\item Verify the Proposition directly for $K(a,b) = a^2 b^2$, $w^* = 0$,
+  direction $u = (1,0)$: $K(tu) = 0$ for all $t$, so $\operatorname{ord} = \infty$.
+  This is a direction \emph{inside} $W_0$, not a dead direction in DDS sense
+  (DDS requires $c > 0$). Check: does the contact locus formulation agree?
+
+\item For direction $u = (1,1)/\sqrt{2}$: $K(w^*+tu) = t^4/4$.
+  KL order $k=2$. Check: $\gamma \in \operatorname{Contact}_3(K)$,
+  $\gamma \notin \operatorname{Contact}_4(K)$. Directional RLCT $= 1/4$.
+
+\item Verify Musta\textcommabelow{t}\u{a}'s formula for $K = a^2 b^2$ with $n=2$, $m=1$:
+  $\operatorname{Contact}_1(K) = \{(a_0,a_1,b_0,b_1) : a_0^2 b_0^2 = 0\} = \{a_0=0\}\cup\{b_0=0\}$
+  in $J_1(\mathbb{R}^2) \cong \mathbb{R}^4$. Dimension $= 3$. Formula gives
+  $(2\cdot 2 - 3)/1 = 1$. But true $\lambda = 1/2$. 
+  \textit{Where does the discrepancy come in? The formula uses $\operatorname{lct}(K)$,
+  and $K \geq 0$ forces RLCT $= \operatorname{lct}(K)/2$ due to even vanishing.
+  Check: $\operatorname{lct}(a^2b^2) = 1$, RLCT $= 1/2$. $\checkmark$}
+
+\item The branch-selection issue: on branch $\{b=0\}$, the contact locus 
+  is $\{b_0 = 0\}$, codimension 1, giving $\operatorname{lct} = 1$, RLCT $= 1/2$.
+  On branch $\{a=0\}$, same. At the origin where branches meet,
+  $\operatorname{Contact}_1$ has both components; the formula still gives $1/2$.
+  Verify the DDS selection rule gives the same from each branch.
+\end{enumerate}
+
+\end{document}
