@@ -19,8 +19,8 @@ copies of a SHARED value tau. As tau -> 0, the product's dead-coordinate
 entries -> tau^L -> 0, exactly realizing M*. Because every layer
 contributes the same factor tau to the dead coordinates, this gives a
 direct, training-free sweep over "distance to the singular locus" (no
-gradient descent, no convergence-criterion tuning -- avoiding exactly the
-protocol sensitivity documented in rrr_model.py's train_rrr_cell).
+gradient descent, no convergence-criterion tuning, which for RRR is
+sensitive to the training/ridge protocol -- see rrr_model.exact_branch_point).
 
 Per-sample gradients (Fisher-Gram) at each internal layer are computed in
 closed form via downstream weight-matrix products, not autograd: for

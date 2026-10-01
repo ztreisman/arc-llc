@@ -1,32 +1,49 @@
 # arc-llc
 
-Comparing two estimators of the RLCT (real log canonical threshold) / local learning
-coefficient (LLC) on a small, analytically tractable singular statistical model:
+Estimators of the RLCT / local learning coefficient (LLC) λ, tested on singular models
+where λ is known in closed form:
 
-1. **Hessian null-space estimator** (geometric): find the zero-curvature directions of
-   the loss K at a point w*, measure their dimension, infer λ from the codimension.
-2. **SGLD estimator** (devinterp-style): sample from a tempered, localized posterior at
-   inverse temperature β = 1/log(n) and read λ off the slope of the free energy vs
-   log(n).
+1. **Hessian null space** (geometric): codimension of the zero-curvature directions of the
+   loss at a point on the singular set.
+2. **SGLD** (devinterp-style): localized tempered-posterior sampling at β = 1/log n.
+3. **Volume scaling**: Vol{K ≤ ε} ~ ε^λ |log ε|^{m−1}, fit with the log-multiplicity term.
+4. **Dead-Direction Signatures** (Shirodkar & Narayanan, arXiv:2606.21158): closed-form
+   spectral reads of activations and the per-sample Fisher-Gram.
 
-Both are validated against a **volume-scaling estimator** and, more recently, against
-**Dead-Direction Signatures** (Shirodkar & Narayanan, arXiv:2606.21158) — a family of
-cheap closed-form spectral reads of a network's activations and per-sample-gradient
-Fisher-Gram — plus ground truth on rank-1 matrix factorization with true rank 0
-(K(A,B) = ||AB||_F², true distribution = zero matrix), where λ is known analytically:
-λ = min(n,m)/2 for r=1.
+Testbeds: rank-1 matrix factorization (λ = min(n,m)/2), the Aoyagi-Watanabe
+reduced-rank-regression grid, an L-layer deep-linear bridge, and the **Toy Model of
+Superposition**, where we reproduce the k-gon critical points, LLCs, and phase
+transitions of Chen et al. (arXiv:2310.06301).
 
-The geometric estimators are motivated by Mustață's jet-scheme characterization of log canonical thresholds (arXiv:math/0102201): the RLCT is determined by dimensions of contact loci in arc space, and the Hessian null space computes the first-order contact data. The longer-term question is whether higher-order jet/contact statistics yield cheaper or more informative LLC estimators than sampling-based methods.
+The geometric estimators are motivated by Mustață's jet-scheme characterization of log
+canonical thresholds (arXiv:math/0102201): the RLCT is determined by dimensions of contact
+loci in arc space, and the Hessian null space is the first-order contact data. The
+longer-term question is whether higher-order jet/contact statistics give cheaper or more
+informative LLC estimators than sampling.
 
-See [`RESULTS.md`](RESULTS.md) for the full write-up — headline numbers, a correction to
-an internal inconsistency in the original spec's ground-truth formula, several
-implementation bugs found and fixed along the way (a log-multiplicity bias in the
-volume estimator, an unstable SGLD step schedule, branch-dependence in the Hessian
-estimator and a multi-restart fix for it), discussion of experiments 4-6, and the DDS
-validation (experiments 7-9: the core rate/structural-correlation claim holds exactly on
-our r=1 toy models and on an L-layer deep-linear bridge; cross-cell magnitude-tracking
-is a harder, more protocol-sensitive story, reported honestly rather than smoothed
-over).
+See [`RESULTS.md`](RESULTS.md) for the full write-up.
+
+## Highlights
+
+- **Ground truth recovered** on matrix factorization by volume scaling and the Hessian
+  estimator (within 2-8%; the Hessian is exact) and by SGLD (5-9% on the singular cases).
+  A multi-restart min-codim fix makes the Hessian estimator exact on asymmetric branches,
+  where a single read is up to 4× off (experiments 1-6).
+- **Toy Model of Superposition** (experiment 10). Exact closed-form population loss.
+  - k-gon losses and prior terms match the paper to 5 digits.
+  - SGLD LLC estimates converge to the theoretical 7 / 8.5 / 8.5 as n grows (6.90, 8.41,
+    8.46 at n = 5·10⁵), showing the overshoot in the paper's own Table K.1 is a finite-n
+    effect.
+  - The 5→6 Bayesian transition comes out at n_cr = 601 (paper: 601).
+  - SGD runs from a 4-gon spend 95% of checkpoints on k-gon plateaus, with λ̂ rising as
+    loss falls.
+- **DDS** (experiments 7-9). The rate claim holds exactly (ρ = 1.000). Across the 14-cell
+  RRR grid, read from a calibrated SGLD posterior ensemble whose own LLC tracks the closed
+  form at ρ = 0.999, DDS orders cells by truth rank within a fixed width (17-20/20 pairs)
+  but does not read λ's magnitude across widths. The apparent σ_min success (ρ = 0.86) is
+  a layer-rank artifact.
+
+![tms](plots/exp10_tms.png)
 
 ## Quickstart
 
@@ -35,37 +52,21 @@ pip install torch numpy scipy matplotlib
 python3 main.py
 ```
 
-Runs all 9 experiments (~8-9 minutes), prints result tables, and writes:
-- `plots/*.png` — volume-scaling and SGLD free-energy fits, the training-trajectory
-  ratio plot, and the arc-direction distribution
-- `results/summary.json`, `results/tables.md` — machine-readable and Markdown results
+Runs all 10 experiments (~10 min on CPU), prints result tables, and writes `plots/*.png`,
+`results/summary.json`, `results/tables.md`.
 
 ## Files
 
 | File | Contents |
 |---|---|
-| `model.py` | The K(w) = \|\|AB\|\|² loss (numpy + torch), gradient/Hessian utilities, analytic ground truth |
-| `estimators.py` | `volume_scaling_estimator`, `hessian_branch_estimator`, `hessian_multi_restart_estimator`, `sgld_llc_estimator`, `arc_direction_estimator` |
-| `dds.py` | Dead-Direction Signatures: activation/Fisher-Gram spectral observables |
-| `rrr_model.py` | Aoyagi-Watanabe reduced-rank-regression model (general truth rank r0), external closed-form RLCT |
-| `deep_linear.py` | L-layer deep-linear "noisy bridge" (DDS's own rank-multiplicative counting-identity testbed) |
-| `experiments.py` | Experiments 1-9 and table formatting |
-| `plots.py` | Plotting utilities |
-| `main.py` | Runs everything, saves plots + results |
-| `RESULTS.md` | Full write-up of findings, corrections, and caveats |
-| `arc_llc_context.md` | Original project spec this implements |
-
-## Headline result
-
-Volume-scaling and Hessian estimators agree with corrected ground truth to within a few percent across all cases. SGLD is accurate on the singular models but overshoots the regular case by ~20% (likely under-equilibration at higher λ; see RESULTS.md).
-
-| Experiment | d | true λ | Volume scaling | Hessian null space | SGLD |
-|---|---|---|---|---|---|
-| 1 (n=m=1) | 2 | 0.500 | 0.458 | 0.500 | 0.525 |
-| 2 (n=m=2) | 4 | 1.000 | 0.983 | 1.000 | 1.086 |
-| 3 (regular, K=\|\|w\|\|²) | 4 | 2.000 | 1.926 | 2.000 | 2.451 |
-
-Experiment 6 (n=1, m=4, asymmetric) shows the naive Hessian estimator is
-branch-dependent — a single run can overstate λ by up to 4x — and validates a
-multi-restart min-codim fix that recovers the exact value. Details in
-[`RESULTS.md`](RESULTS.md).
+| `model.py` | K(w) = ‖AB‖² (numpy + torch), gradient/Hessian utilities, ground truth |
+| `estimators.py` | Volume scaling, Hessian branch / multi-restart, SGLD, arc-direction estimators |
+| `dds.py` | Dead-Direction Signatures: activation and Fisher-Gram spectral observables |
+| `rrr_model.py` | Reduced-rank regression (truth rank r0), Aoyagi-Watanabe closed form, batched localized SGLD |
+| `deep_linear.py` | L-layer deep-linear bridge for the DDS counting identity |
+| `tms.py` | Toy Model of Superposition: exact population loss, k-gons, SGLD LLC, batched SGD |
+| `experiments.py` | Experiments 1-10 |
+| `plots.py`, `main.py` | Plotting; run everything |
+| `RESULTS.md` | Write-up |
+| `notes/dds_arc.tex` | Note relating DDS to the arc-space picture |
+| `arc_llc_context.md` | Original project spec |

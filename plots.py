@@ -94,7 +94,7 @@ def plot_training_trajectory(exp4, out_path):
     ax1.set_ylabel("lambda / (d/2)  [log scale]")
     ax1.legend(fontsize=8, loc="upper right")
     ax1.set_title(exp4["tag"] +
-                   "\n(large early ratios = local ball not yet near any zero of K, not a 'regular' reading)")
+                   "\n(large early ratios: local ball not yet near a zero of K)", fontsize=9)
 
     ax2 = axes[1]
     ax2.semilogx(steps, dists, "-", color="C2", label="||w_t|| (dist to origin)")
@@ -106,7 +106,7 @@ def plot_training_trajectory(exp4, out_path):
 
     lines1, labels1 = ax2.get_legend_handles_labels()
     lines2, labels2 = ax2b.get_legend_handles_labels()
-    ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=8)
+    ax2.legend(lines1 + lines2, labels1 + labels2, loc="center left", fontsize=8)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=140)
@@ -150,25 +150,37 @@ def plot_dds_validation(exp7, out_path):
 
 
 def plot_dds_cross_cell(exp8, out_path):
-    rows = exp8["rows"]
+    cells = exp8["cells"]
     lam_true = exp8["lambda_true"]
-    observables = ["lambda_plus_min_h2", "log_det_plus_h2", "sigma_min_h2"]
+    Hs = np.array([c["H"] for c in cells])
+    within = exp8["within_H_concordance"]
+    panels = [("llc", "SGLD LLC  n*beta*E[K]", exp8["llc_hat"], exp8["rho_llc"], None)]
+    for name in exp8["observables"]:
+        panels.append((name, "log " + name if not name.startswith("log") else name,
+                       exp8["per_cell_mean"][name], exp8["cross_cell_rho"][name],
+                       exp8["cross_cell_rho_ci"][name]))
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
-    for ax, name in zip(axes, observables):
-        vals = np.array([r[name] for r in rows])
-        rho = exp8["cross_cell_rho"][name]
-        for r, v in zip(rows, vals):
-            ax.scatter(r["lambda_true"], v, c=f"C{r['H']-2}", s=40)
-        ax.set_yscale("log" if (vals > 0).all() else "linear")
-        ax.set_xlabel("analytical Aoyagi lambda")
-        ax.set_ylabel(name)
-        ax.set_title(f"{name}\nrho={rho:.3f}")
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.0 * len(panels), 4.2))
+    for ax, (key, label, vals, rho, ci) in zip(axes, panels):
+        for h in [2, 3, 4, 5]:
+            sel = Hs == h
+            order = np.argsort(lam_true[sel])
+            ax.plot(lam_true[sel][order], np.asarray(vals)[sel][order], "o-", color=f"C{h-2}",
+                    ms=5, lw=1)
+        c, t = within[key]
+        if key == "llc":
+            lim = [lam_true.min() - 1, lam_true.max() + 3]
+            ax.plot(lim, lim, "k--", lw=0.8)
+            title = f"{label}\nrho={rho:.3f}, within-H {c}/{t}"
+        else:
+            title = f"{label}\nrho={rho:.2f} [{ci[0]:.2f}, {ci[1]:.2f}], within-H {c}/{t}"
+        ax.set_xlabel("closed-form lambda")
+        ax.set_title(title, fontsize=9)
 
-    handles = [plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=f"C{h-2}",
-                           label=f"H={h}", markersize=8) for h in [2, 3, 4, 5]]
-    axes[-1].legend(handles=handles, fontsize=8, loc="best")
-    fig.suptitle(exp8["tag"])
+    handles = [plt.Line2D([0], [0], marker="o", color=f"C{h-2}", label=f"H={h}", markersize=6)
+               for h in [2, 3, 4, 5]]
+    axes[0].legend(handles=handles, fontsize=8, loc="upper left")
+    fig.suptitle(exp8["tag"] + "  (lines join cells of equal width H, r0 increasing)", fontsize=10)
     fig.tight_layout()
     fig.savefig(out_path, dpi=140)
     plt.close(fig)
@@ -195,6 +207,69 @@ def plot_deep_linear_counting(exp9, out_path):
                   "mathematical necessity here, not an independent empirical test --\n"
                   "see RESULTS.md)")
     ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
+def plot_tms(exp10, out_path):
+    sgd = exp10["sgd"]
+    L, lam, ep = sgd["loss"], sgd["lam_hat"], sgd["epochs"]
+    levels = sgd["ref_levels"]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.3))
+
+    # (1) LLC estimate vs n at the 5, 5+, 6-gons
+    ax = axes[0]
+    for i, (name, row) in enumerate(exp10["llc"].items()):
+        ns = sorted(row["est"])
+        m = [row["est"][n]["mean"] for n in ns]
+        sd = [row["est"][n]["std"] for n in ns]
+        ax.errorbar(np.array(ns) * (1 + 0.06 * (i - 1)), m, yerr=sd, fmt="o-", color=f"C{i}",
+                    capsize=3, label=f"{name}-gon (theory {row['theory']})")
+        ax.axhline(row["theory"], color=f"C{i}", ls="--", lw=0.8)
+        ax.scatter([5000 * (1 + 0.06 * (i - 1))], [row["paper_hat_n5000"]], marker="x",
+                   color=f"C{i}", s=60, zorder=5)
+    ax.set_xscale("log")
+    ax.set_xlabel("n (sets SGLD temperature n*beta, beta=1/log n)")
+    ax.set_ylabel("LLC estimate")
+    ax.set_title("SGLD LLC at k-gon critical points\n(dashed: theory, x: Chen et al. Table K.1)",
+                 fontsize=10)
+    ax.legend(fontsize=8)
+
+    # (2) one trajectory: opposing staircases
+    ax = axes[1]
+    n_plateaus = [len({round(v, 3) for v in L[:, s] if min(abs(v - lv) for lv in levels.values()) < 3e-4})
+                  for s in range(L.shape[1])]
+    s = int(np.lexsort((L[-1], -np.array(n_plateaus)))[0])
+    smooth = np.full(len(ep), np.nan)
+    smooth[5:] = np.convolve(lam[:, s], np.ones(6) / 6, mode="valid")
+    ax.plot(ep, L[:, s], color="C0")
+    for nm, lv in levels.items():
+        ax.axhline(lv, color="gray", lw=0.5, ls=":")
+        ax.text(ep[-1], lv, f" {nm}", fontsize=7, va="center", color="gray")
+    ax.set_xlabel("epoch")
+    ax.set_ylabel("population loss", color="C0")
+    ax2 = ax.twinx()
+    ax2.plot(ep, smooth, color="C3")
+    ax2.set_ylabel("LLC estimate (smoothed, window 6)", color="C3")
+    ax.set_title(f"SGD from a 4-gon (trajectory {s}):\nloss falls, LLC rises", fontsize=10)
+
+    # (3) all checkpoints: loss vs LLC
+    ax = axes[2]
+    Lf, lf = L.ravel(), lam.ravel()
+    other = np.ones_like(Lf, dtype=bool)
+    for i, (nm, lv) in enumerate(levels.items()):
+        sel = np.abs(Lf - lv) < 3e-4
+        other &= ~sel
+        if sel.any():
+            ax.scatter(lf[sel], Lf[sel], s=6, color=f"C{i}", label=f"{nm}  (n={sel.sum()})")
+    ax.scatter(lf[other], Lf[other], s=4, color="lightgray", label="in transit")
+    ax.set_xlabel("LLC estimate (eps=1e-3, gamma=1, 500 steps)")
+    ax.set_ylabel("population loss")
+    ax.set_title(f"All {L.shape[1]} trajectories x {L.shape[0]} checkpoints", fontsize=10)
+    ax.legend(fontsize=7, markerscale=2)
+
+    fig.suptitle(exp10["tag"], fontsize=11)
     fig.tight_layout()
     fig.savefig(out_path, dpi=140)
     plt.close(fig)

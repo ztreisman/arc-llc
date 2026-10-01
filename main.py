@@ -1,4 +1,4 @@
-"""Run experiments 1-5 from arc_llc_context.md, print result tables, and save
+"""Run experiments 1-10, print result tables, and save
 plots to plots/ and a machine-readable summary to results/summary.json.
 """
 import json
@@ -86,14 +86,26 @@ def main():
         "rho_h1_h2_trajectory": e7["rho_h1_h2_trajectory"],
     }
 
-    print("\nRunning Experiment 8 (DDS cross-cell rank-tracking, Aoyagi 2005 anchor)...")
+    print("\nRunning Experiment 8 (DDS cross-cell rank-tracking, SGLD posterior ensemble)...")
     e8 = ex.experiment_8()
     plots.plot_dds_cross_cell(e8, "plots/exp8_dds_cross_cell.png")
-    print("  Cross-cell Spearman rho vs true lambda:")
+    print(f"  sampler LLC vs closed form: rho={e8['rho_llc']:.3f}, "
+          f"rel. error {100*e8['llc_rel_err'].min():.1f}%..{100*e8['llc_rel_err'].max():.1f}%")
+    print("  Cross-cell Spearman rho vs true lambda (95% bootstrap CI over chains):")
     for name, rho in e8["cross_cell_rho"].items():
-        print(f"    {name}: {rho:.3f}")
+        lo, hi = e8["cross_cell_rho_ci"][name]
+        c, t = e8["within_H_concordance"][name]
+        print(f"    {name}: {rho:.3f} [{lo:.3f}, {hi:.3f}]   within-H concordant pairs {c}/{t}")
+    c, t = e8["within_H_concordance"]["llc"]
+    print(f"    (sampler LLC within-H concordant pairs {c}/{t})")
+    print("  Ablation (single constructed point), rho by perturbation scale:")
+    for scale, d in e8["ablation_rho"].items():
+        print(f"    scale={scale}: " + ", ".join(f"{k}={v:.2f}" for k, v in d.items()))
     summary["experiment_8"] = {
         "cross_cell_rho": e8["cross_cell_rho"],
+        "cross_cell_rho_ci": e8["cross_cell_rho_ci"],
+        "rho_llc": e8["rho_llc"], "within_H_concordance": e8["within_H_concordance"], "llc_rel_err": e8["llc_rel_err"].tolist(),
+        "ablation_rho": {str(k): v for k, v in e8["ablation_rho"].items()},
         "n_cells": len(e8["cells"]),
     }
 
@@ -107,6 +119,28 @@ def main():
               f"lambda_plus_min_ratio={s['lambda_plus_min_ratio_mean']:.4f} "
               f"+/- {s['lambda_plus_min_ratio_std']:.4f}")
     summary["experiment_9"] = {"ratio_summary": e9["ratio_summary"], "Ls": e9["Ls"], "rs": e9["rs"]}
+
+    print("\nRunning Experiment 10 (Toy Model of Superposition, reproducing Chen et al. 2023)...")
+    e10 = ex.experiment_10()
+    plots.plot_tms(e10, "plots/exp10_tms.png")
+    for name, c in e10["critical_points"].items():
+        print(f"  {name:>3}-gon: loss={c['loss']:.5f} (paper {c['paper_loss']:.5f}), "
+              f"|grad|={c['grad_norm']:.1e}, prior factor={c['prior']:.5f} (paper {c['paper_prior']:.5f})")
+    for name, row in e10["llc"].items():
+        ests = ", ".join(f"n={n}: {v['mean']:.2f}+/-{v['std']:.2f}" for n, v in row["est"].items())
+        print(f"  LLC {name}-gon: theory {row['theory']}, {ests}")
+    nc = e10["n_crit"]["5->6"]
+    print(f"  5->6 critical sample size: {nc['ours']:.0f} (paper {nc['paper']})")
+    vals, counts = np.unique(e10["sgd"]["near"], return_counts=True)
+    print("  SGD checkpoints by plateau: " + ", ".join(f"{v or 'transit'}={c}" for v, c in zip(vals, counts)))
+    summary["experiment_10"] = {
+        "critical_points": e10["critical_points"],
+        "llc": {k: {"theory": v["theory"], "paper_hat_n5000": v["paper_hat_n5000"],
+                    "est": {str(n): e for n, e in v["est"].items()}} for k, v in e10["llc"].items()},
+        "n_crit": e10["n_crit"],
+        "sgd_plateau_counts": {(v or "transit"): int(c) for v, c in zip(vals, counts)},
+        "sgd_final_loss": e10["sgd"]["loss"][-1].tolist(),
+    }
 
     with open("results/summary.json", "w") as f:
         json.dump(summary, f, indent=2, default=lambda o: float(o) if isinstance(o, np.floating) else str(o))

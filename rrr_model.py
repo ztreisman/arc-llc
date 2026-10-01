@@ -53,53 +53,6 @@ def dim_w_rrr(M, N, H):
     return H * (M + N)
 
 
-def train_rrr_cell(M, N, H, r0, n_steps=200_000, lr=0.02, ridge=1e-4, target_K=1e-6, seed=0):
-    """Train W1, W2 via Adam on K(w) + ridge*||w||^2 to a converged checkpoint.
-
-    When H > r0, {(W1,W2) : W2 W1 = M*} is itself a positive-dimensional
-    manifold (H-r0 "excess" bottleneck directions can be rotated/rescaled
-    freely while still exactly representing M*), so plain gradient descent
-    on K alone has no reason to drive the excess directions to zero -- it
-    can converge to any point on that manifold, and empirically all H
-    bottleneck directions end up with comparably tiny Fisher eigenvalues
-    (all shrinking together as the residual shrinks) rather than showing
-    the r0-vs-(H-r0) split DDS's rank-deficit story requires. A small
-    ridge term selects the minimum-norm point on that manifold -- the one
-    where the excess directions are actually driven to zero while the r0
-    genuine directions stabilize at whatever's needed to represent M* --
-    exactly the same fix used for the r=1 training trajectory in
-    experiment_4.
-    """
-    rng = np.random.default_rng(seed)
-    torch.manual_seed(seed)
-    M_star = make_teacher(N, M, r0)
-    M_star_t = torch.tensor(M_star, dtype=torch.float64)
-    K_t = make_K_torch_rrr(M_star_t, H)
-
-    d = dim_w_rrr(M, N, H)
-    w = torch.tensor(rng.standard_normal(d) * 0.5, dtype=torch.float64, requires_grad=True)
-    opt = torch.optim.Adam([w], lr=lr)
-    # Adaptive stopping (target_K) rather than a fixed step count: cells
-    # vary substantially in how many steps they need to reach a comparable
-    # residual, and a fixed budget left final_K spanning ~100x across
-    # cells, which swamps the cross-cell DDS signal with convergence-level
-    # noise rather than genuine singularity-structure differences.
-    for step in range(n_steps):
-        opt.zero_grad()
-        K_val = K_t(w)
-        loss = K_val + ridge * (w ** 2).sum()
-        loss.backward()
-        opt.step()
-        if K_val.item() < target_K:
-            break
-
-    w_np = w.detach().numpy()
-    W1 = w_np[: H * M].reshape(H, M)
-    W2 = w_np[H * M :].reshape(N, H)
-    final_K = float(K_t(w).item())
-    return {"A": W2, "B": W1, "M_star": M_star, "final_K": final_K, "w": w_np}
-
-
 def exact_branch_point(M, N, H, r0, scale=0.03, rng=None):
     """A controlled reference point on the singular locus: the exact
     minimum-norm factorization of M* (W2_star @ W1_star = M* exactly, using
@@ -110,8 +63,9 @@ def exact_branch_point(M, N, H, r0, scale=0.03, rng=None):
     This is the RRR analogue of model.py::sample_on_branch, constructing
     the reference point directly rather than gradient-descending to some
     convergence criterion (which we found highly sensitive to the
-    training/ridge protocol -- see train_rrr_cell's docstring and
-    RESULTS.md).
+    training/ridge protocol: when H > r0 the solution set is a manifold and
+    GD without ridge lands anywhere on it). Used in experiment 8 only as an
+    ablation; the main protocol reads observables from sgld_rrr_chains.
 
     When H > r0, the perturbation is applied only to the H-r0 excess
     bottleneck directions (the mechanism the paper's own rank-deficit
@@ -150,6 +104,47 @@ def exact_branch_point(M, N, H, r0, scale=0.03, rng=None):
         W1 += scale * dW1 / total_norm
         W2 += scale * dW2 / total_norm
     return W1, W2
+
+
+def sgld_rrr_chains(M, N, H, r0, n=10_000, chains=8, burn=60_000, steps=60_000,
+                    thin=2_000, lr=5e-5, gamma=1.0, seed=0):
+    """Localized SGLD posterior around the exact minimum-norm solution of the
+    RRR model, with `chains` independent chains run in parallel (analytic
+    gradients, batched numpy).
+
+    Target: exp(-n*beta*K(w) - gamma*||w - w*||^2), beta = 1/log(n).
+
+    Step size matters more than it looks: the stiffest direction has curvature
+    ~2*n*beta, and an Euler step with lr*n*beta not << 1 inflates the energy
+    in exactly the stiff directions (lr=2e-4 overestimated lambda by ~40%;
+    lr=5e-5 brings the bias to 5-9%, the remainder being finite-n/localization).
+
+    Returns the per-chain LLC estimate lam_hat = n*beta*E[K] (K(w*)=0 here),
+    and the thinned snapshots (list of (W1, W2) arrays with a leading chain axis).
+    """
+    rng = np.random.default_rng(seed)
+    T = make_teacher(N, M, r0)
+    W1s = np.zeros((H, M))
+    W2s = np.zeros((N, H))
+    for i in range(r0):
+        W1s[i, i] = 1.0
+        W2s[i, i] = 1.0
+    nb = n / np.log(n)
+    W1 = np.repeat(W1s[None], chains, 0)
+    W2 = np.repeat(W2s[None], chains, 0)
+    Ks, snaps = [], []
+    for t in range(burn + steps):
+        R = W2 @ W1 - T
+        g1 = 2 * nb * np.swapaxes(W2, 1, 2) @ R + 2 * gamma * (W1 - W1s)
+        g2 = 2 * nb * R @ np.swapaxes(W1, 1, 2) + 2 * gamma * (W2 - W2s)
+        W1 = W1 - lr / 2 * g1 + np.sqrt(lr) * rng.standard_normal(W1.shape)
+        W2 = W2 - lr / 2 * g2 + np.sqrt(lr) * rng.standard_normal(W2.shape)
+        if t >= burn:
+            Ks.append((R ** 2).sum((1, 2)))
+            if (t - burn) % thin == 0:
+                snaps.append((W1.copy(), W2.copy()))
+    lam_hat = nb * np.mean(Ks, axis=0)
+    return lam_hat, snaps, T
 
 
 def aoyagi_2005_anchor_cells(M=10, N=5):

@@ -1,323 +1,300 @@
-# Results: Hessian null-space vs SGLD estimators of the RLCT/LLC
+# Results
 
-Implementation of the plan in `arc_llc_context.md`: compare a new geometric estimator
-(Hessian null space) against the standard devinterp SGLD estimator, validated against
-analytically known RLCT values on rank-1 matrix factorization with true rank 0.
+Estimating the RLCT / local learning coefficient (LLC) λ on singular models where it is
+known in closed form, comparing a geometric estimator (Hessian null space), the standard
+SGLD estimator, a volume-scaling estimator, and Dead-Direction Signatures (DDS), then
+reproducing the k-gon phase structure of the Toy Model of Superposition.
 
-Run `python3 main.py` to reproduce. Full numbers in `results/summary.json` and
-`results/tables.md`; plots in `plots/`.
+Run `python3 main.py` to reproduce everything (~10 min on CPU). Numbers below are from
+that run; full output in `results/summary.json` and `results/tables.md`, plots in `plots/`.
 
-## Headline result
+## Summary
 
-All four estimators — volume scaling, Hessian null space (on either branch), and SGLD —
-agree with each other and with ground truth to within a few percent, on both test cases:
+| # | Model | Question | Result |
+|---|---|---|---|
+| 1-3 | ‖AB‖², r=1 (and a regular control) | Do the estimators recover known λ? | Volume scaling and Hessian within 2-8%; SGLD within 5-9% on singular cases, 23% high on the regular one |
+| 4 | ‖AB‖² + ridge, GD trajectory | What does a local λ estimate read along training? | Meaningless until the ball contains a zero of K, then the branch RLCT; the log-multiplicity term flags the origin |
+| 5 | ‖AB‖², n=m=2 | Does the sphere distribution of K see λ? | Exponent 0.93 vs 1.0 |
+| 6 | ‖AB‖², n=1, m=4 | Asymmetric branches | One Hessian read can be 4× off; min-codim over restarts gives the exact λ |
+| 7 | ‖AB‖² as a 2-layer linear net | DDS rate claim | Exact: ρ = 1.000, slope 2.000 vs 2 |
+| 8 | Reduced-rank regression, 14 cells | DDS across cells with different λ | DDS orders cells by truth rank within a fixed width (17-20/20 pairs) but gives no reliable λ magnitude across widths; the apparent σ_min success is a rank artifact |
+| 9 | L-layer deep-linear bridge | DDS counting identity | log det⁺ slope ratio = r exactly (holds by construction) |
+| 10 | Toy Model of Superposition, r=2, c=6 | Reproduce Chen et al. (2023) | k-gon losses and prior terms to 5 digits; SGLD LLC → theory (7, 8.5, 8.5) as n grows; n_cr = 601 for 5→6; SGD plateaus at k-gon levels while λ̂ rises |
+
+## Setup and ground truth
+
+Parameters w = (A, B), A ∈ ℝⁿˣʳ, B ∈ ℝʳˣᵐ, loss K(w) = ‖AB‖²_F (true distribution = zero
+matrix). For r = 1 the zero set {AB = 0} = {A = 0} ∪ {B = 0} is two linear subspaces
+crossing at the origin. The zeta function factors into independent radial integrals,
+
+    ζ(z) = ∫‖a‖^{2z} da · ∫‖b‖^{2z} db,
+
+with simple poles at z = −n/2 and z = −m/2, so
+
+    λ = min(n, m) / 2,   multiplicity 2 iff n = m.
+
+(The r(n+m−r)/2 formula sometimes quoted for this family is the RLCT of reduced-rank
+*regression*, which integrates over an input distribution; that model is used in
+experiment 8 with its own closed form.)
+
+## Experiments 1-3: estimators against ground truth
 
 | Experiment | d | true λ | Volume scaling | Hessian null space | SGLD |
 |---|---|---|---|---|---|
 | 1 (n=m=1) | 2 | 0.500 | 0.458 | 0.500 | 0.525 |
 | 2 (n=m=2) | 4 | 1.000 | 0.983 | 1.000 | 1.086 |
-| 3 (regular, K=\|\|w\|\|²) | 4 | 2.000 | 1.926 | 2.000 | 2.451 |
+| 3 (regular, K=‖w‖²) | 4 | 2.000 | 1.926 | 2.000 | 2.451 |
 
-The Hessian null-space estimator is exact in these cases (see caveat below on *why* —
-it isn't measuring quite what the RLCT literature usually means). SGLD is noisier
-(6-8% high on the singular cases, ~23% high on the regular one) but recovers the right
-answer within the noise of a 5-chain estimate.
+The Hessian estimator is exact here, but it measures branch codimension, which matches
+the RLCT for this geometry (see experiment 6). SGLD runs 5-9% high on the singular cases
+and 23% high on the regular one. Experiments 8 and 10 trace this kind of bias to step-size
+discretization and to finite-n corrections.
 
-## Correction to the source spec
+### Implementation notes
 
-`arc_llc_context.md` states a general formula λ = r(n+m-r)/2, then in the very next
-section derives, via the zeta function, λ=1/2 for r=1,n=m=1 and λ=1 for r=1,n=m=2.
-**These are inconsistent for n=m=2**: the general formula gives 3/2, the worked
-derivation gives 1. The general formula is the Aoyagi–Watanabe RLCT for *reduced-rank
-regression* (y = BAx + noise, with an extra integral over an input distribution x) —
-a related but different model from the plain Frobenius-norm loss K = ||AB||_F^2
-actually implemented here (there's no x to integrate over).
+1. **Volume scaling needs the log-multiplicity term.** A pole of multiplicity m gives
+   Vol(ε) ~ C ε^λ |log ε|^{m−1}, so a pure power-law fit is biased low (0.44 vs 0.50 for
+   experiment 1; 0.90 vs 1.00 for experiment 2). The estimator regresses log Vol on
+   [1, log ε, log(−log ε)], which recovers 0.46 and 0.98.
+2. **Vectorized K.** Batched einsum over (N, d) samples is >1000× faster than a per-sample
+   loop, which makes 5M-sample volume estimates cheap.
+3. **SGLD step size.** Scaling the step by 1/(nβ) keeps the drift bounded but slows
+   relaxation by the same factor, so at large n the chain never equilibrates and returns a
+   drifting trace. A fixed step, tuned for stability at the largest nβ, equilibrates at
+   every n. Averaging 5 chains is needed for a stable slope (a single chain gave 1.38 vs
+   1.09 on experiment 2).
+4. **The Hessian is evaluated on a smooth branch.** K is quartic, so ∇²K(0) = 0. At a
+   point on one branch away from the origin, the null space is that branch's tangent
+   space, and λ̂ = codim/2. For n = m both branches agree; experiment 6 handles n ≠ m.
 
-For r=1, ζ(z) factors as independent radial integrals over a ∈ R^n and b ∈ R^m
-(K(a,b) = ||a||²||b||²), each contributing a simple pole at z=-n/2 and z=-m/2. The RLCT
-is the rightmost pole:
-
-    lambda = min(n, m) / 2,   multiplicity 2 iff n == m, else 1
-
-This matches the doc's own two worked examples exactly, and — more importantly — is
-independently confirmed by all four estimators here, including the exact analytic
-Hessian computation (not just a Monte Carlo method that could share a bug with the
-zeta-function derivation). `model.py::true_lambda` implements this for r=1; the r>1
-case is untouched (no experiment here instantiates r>1, so it's left unverified).
-
-## Implementation notes and fixes beyond the original plan
-
-The plan's pseudocode was a good starting point but had a few bugs / underspecified
-details that mattered in practice:
-
-1. **Volume scaling has a log-multiplicity bias.** A naive `log(Vol) ~ lambda*log(eps)`
-   fit is measurably biased low (0.42 vs true 0.50 for experiment 1) because the RLCT
-   zeta function's pole multiplicity (2, for both cases tested) produces a
-   `Vol(eps) ~ C * eps^lambda * |log eps|^k` asymptotic, not a pure power law. Fitting
-   `k` alongside `lambda` (linear regression on `[1, log(eps), log(-log(eps))]`)
-   removes most of the bias (0.983 vs naive 0.898 for experiment 2). This is a direct
-   consequence of the same pole-multiplicity structure the doc itself derives, just not
-   connected to the volume-estimator implementation there.
-
-2. **`K` needed vectorizing.** The plan's `make_K` evaluates one sample at a time; a
-   Python-level loop over hundreds of thousands of Monte Carlo samples is the dominant
-   cost (~15s per call). Rewriting it as a single batched einsum over `(N, d)` arrays
-   gives a >1000x speedup, which is what makes 5M-sample volume estimates and 2M-sample
-   arc-direction estimates cheap enough to run routinely.
-
-3. **The SGLD step-size schedule in the plan is unstable.** Scaling `lr` down by
-   `1/(n*beta_n)` (as sketched) keeps the drift step bounded, but it also scales down
-   the Ornstein-Uhlenbeck relaxation rate near w* by the same factor, so the chain
-   never re-equilibrates within a fixed step budget for larger n — it just silently
-   returns a non-stationary trace (checked directly: the chain's mean position drifts
-   monotonically with n instead of converging to a fixed distribution). Because K is
-   quartic (tiny gradient near w*=0), a single fixed `lr`, tuned for stability at the
-   largest `n*beta_n` used, is both stable and lets the chain equilibrate for every n.
-   Averaging `num_chains=5` independent chains per n (standard devinterp practice)
-   was also necessary — a single chain's free-energy estimate is noisy enough to
-   visibly bias the fitted slope run to run (1.09 vs 1.38 for experiment 2, same seed
-   family, chains=5 vs 1).
-
-4. **The Hessian null-space estimator, evaluated off-origin, measures branch tangent
-   dimension, not the RLCT directly** — and the two coincided only because n==m in
-   experiments 1/2, which hid the issue. At w*=0 the Hessian is identically zero (K is
-   quartic), so we evaluate it at a point on one *smooth* branch of W0 (away from the
-   origin where the branches cross). There, the null space is exactly the tangent
-   space of that single branch, giving `lambda_estimate = codim/2`: codim n on the
-   `{B=0}` branch (A free), codim m on the `{A=0}` branch (B free). For n=m these
-   coincide with `min(n,m)/2`; for n≠m a *single* Hessian evaluation gives one of two
-   different, generally-wrong answers depending on which branch a gradient-descent run
-   happens to land on.
-
-   **Fix, proposed and validated in a follow-up round (experiment 6):** run gradient
-   descent from many random restarts, take the Hessian null-space codim at each
-   converged point, and use `min(codim)` rather than any single run's codim. This
-   works because W0's true RLCT is the *minimum* over its branches' codimensions (the
-   zeta function's rightmost pole is set by the smallest-codimension stratum), and a
-   union-of-linear-subspaces variety like this one has no additional singularity at
-   the crossing point beyond what's visible in each branch — so `min(codim)/2` over
-   branches equals the true RLCT exactly, not just approximately. `hessian_multi_restart_estimator`
-   implements this; on the asymmetric case n=1, m=4 (true λ=0.5) it correctly returns
-   0.5 (20 restarts: 18 land on the codim-1 branch, 2 on the codim-4 branch, min wins),
-   versus a naive single Hessian evaluation on the wrong branch overstating λ by 4x
-   (2.0 instead of 0.5). It's also cheap to be confident in: for r=1, whether GD lands
-   on the low- or high-codim branch is governed by a conserved quantity of the
-   K-gradient flow (`||A||^2 - ||B||^2`), and the branch with smaller codimension
-   turns out to be the *more probable* outcome from a generic random init when n≠m
-   (empirically 62-99% per single run across the (n,m) pairs tested here), so a modest
-   number of restarts (~20) reliably includes at least one success.
-
-   Caveat on generality: this min-codim trick is a fact about *this* geometry — a
-   normal-crossing arrangement of coordinate subspaces, where every branch is smooth
-   and the crossing itself adds only pole *multiplicity*, not a smaller pole location.
-   It is not a general RLCT-estimation method. For r>1 (not tested here) or for
-   singularities that aren't simple unions of linear subspaces, resolving the
-   singularity could reveal an even smaller RLCT that isn't the codimension of any
-   smooth stratum visible in the original coordinates, and this restart-and-minimize
-   trick would then undershoot the truth less reliably or not at all.
-
-   Experiment 6 (r=1, n=1, m=4, d=5, true λ=0.500):
-
-   | Method | λ estimate |
-   |---|---|
-   | Single Hessian, branch='A' (A free, on {B=0} plane, codim m=4) | 2.000 |
-   | Single Hessian, branch='B' (B free, on {A=0} plane, codim n=1) | 0.500 |
-   | Multi-restart min-codim (20 restarts: 18×codim-1, 2×codim-4) | 0.500 |
-
-## Experiment 4: local ratio across a training trajectory
-
-The plan expected "ratio starts near 1 (regular), decreases toward 1/2 (singular) as
-training converges." That's not quite what happens, and the actual mechanism is more
-informative:
+## Experiment 4: local λ along a training trajectory
 
 ![trajectory](plots/exp4_trajectory.png)
 
-Starting from a deliberately large random initialization (far from W0 = {AB=0}) and
-descending K(w) + ridge·||w||² with Adam, the *local* volume-scaling ratio (computed
-on a small ball of radius 0.15 around the current iterate) is initially a **large,
-not-really-interpretable number** (~29, not ~1) — because that small ball doesn't yet
-contain any near-zero of K at all. The log-log volume/eps "fit" in that regime is just
-measuring the shape of a locally linear (not quadratic) function, which isn't RLCT
-behavior in any meaningful sense. Only once the trajectory gets close enough to W0 for
-the ball to actually contain a near-zero does the ratio snap down — sharply, around
-step 100-150 here — to ≈0.5, matching the branch-local RLCT, and it stays there for a
-long stretch while a weight-decay-driven "balancing" dynamic (the classical deep-linear
-imbalance a²-b² decaying under ridge) slowly pulls the trajectory the rest of the way
-from a generic point on the branch to the true origin. The fitted log-multiplicity
-constant k — which stays low (~0.1-0.6) while on a generic branch point — spikes to
-~2.6-4.7 right as the trajectory reaches the actual origin, correctly flagging the
-higher-order singularity where both branches cross, even though λ itself reads the same
-0.5 in both regimes for this symmetric model.
+Starting far from the zero set and descending K + ridge·‖w‖², the local volume-scaling
+ratio (ball radius 0.15) starts at ~29. That value is not an RLCT reading: the ball
+contains no near-zero of K yet, so the fit only measures a locally linear function. Once
+the iterate is close enough for the ball to contain a zero (around step 100-150), the
+ratio drops to ≈0.5, the branch RLCT. It stays there while weight decay slowly balances
+‖a‖² − ‖b‖² and pulls the iterate toward the origin. The fitted log-multiplicity k stays
+at 0.1-0.6 on a generic branch point and jumps to ~3.7-5.0 at the origin, where the two
+branches cross. λ itself reads 0.5 in both regimes.
 
-Takeaway: "regular ratio ≈ 1" isn't really a distance-to-origin story; it's an artifact
-of not yet being close enough to *any* zero of K for volume scaling to be meaningful.
-Once meaningful, it reads out the branch RLCT immediately, and only the log-multiplicity
-correction distinguishes generic points of the singular locus from the origin itself.
+Practical consequence: a local λ estimate is only meaningful once the sampling region
+contains a near-minimum, so the minimum K seen in the ball is a necessary validity check.
 
 ## Experiment 5: arc-direction distribution
 
-The plan's guess that P(K(delta) < eps) for delta on the unit sphere scales as
-eps^(dim W0/4) doesn't match the same zeta-function logic used above. Redone: near the
-"a-axis" of a branch, K(delta) = ||a||²||b||² ~ ||b||² for small transverse ||b||
-(quadratic, not linear, in the transverse coordinate), so the sphere-measure within eps
-of a branch scales as eps^(codim/2) for that branch, and the overall exponent is
-dominated by the smaller codim, i.e. min(n,m)/2 = lambda again. Fitted exponent for
-experiment 5 (n=m=2): **0.933**, matching the predicted 1.0 within Monte Carlo noise —
-an independent (fifth) confirmation of the corrected ground truth.
+For δ on the unit sphere, K(δ) = ‖a‖²‖b‖² is quadratic in the coordinates transverse to
+each branch. So P(K(δ) < ε) ~ ε^{codim/2}, dominated by the smaller codimension, i.e.
+ε^λ. Fitted exponent for n = m = 2: **0.933** vs predicted 1.0.
 
-## Experiments 7-8: Dead-Direction Signatures (Shirodkar & Narayanan, 2606.21158)
+## Experiment 6: asymmetric branches and the multi-restart Hessian estimator
 
-DDS is a family of cheap, closed-form spectral estimators of the RLCT, reading a
-network's activations and per-sample-gradient Fisher-Gram at a chosen layer instead of
-running an SGLD posterior chain. Three observables: `sigma_min(X_ell)` (smallest
-activation singular value), `lambda_plus_min(G_ell)` (smallest strictly-positive
-Fisher-Gram eigenvalue), `log_det_plus(G_ell)` (active-spectrum log-volume). Our
-K(w) = ||AB||_F^2 model already **is** the two-layer linear network these observables
-are read from (x -> hidden=Bx [layer "h1"] -> output=A(Bx) [layer "h2"], zero teacher)
-— no new model was needed for the first validation pass. Code: `dds.py`.
+For n ≠ m, one Hessian evaluation gives n/2 or m/2 depending on which branch gradient
+descent lands on. Taking min(codim) over 20 GD restarts recovers λ = min(n, m)/2 exactly.
 
-### Experiment 7: the core claim holds exactly on our toy models
+| Method (r=1, n=1, m=4, true λ = 0.5) | λ̂ |
+|---|---|
+| Single Hessian on {B=0} (codim 4) | 2.000 |
+| Single Hessian on {A=0} (codim 1) | 0.500 |
+| Multi-restart min-codim (20 restarts: 18 × codim 1, 2 × codim 4) | 0.500 |
 
-DDS's central theorem (structural correlation: `lambda_plus_min(G) ~ sigma_min(X)^2`,
-both decaying as powers of t approaching a singular point) was tested two ways:
+Which branch GD reaches is set by the conserved quantity ‖A‖² − ‖B‖² of the gradient flow.
+The lower-codim branch is the more likely outcome from random init when n ≠ m (62-99% per
+run across the pairs tried), so ~20 restarts suffice.
 
-1. **Analytic-limit rate check** — approach the `{B=0}` branch along a fixed transverse
-   direction, t -> 0. Result: `rho(lambda_plus_min(G_h1), sigma_min(X_h1)^2) = 1.0000`
-   exactly, with both quantities decaying at the predicted rate (slope 2.00 vs
-   predicted 2), matching the DDS paper's own reported analytic-limit result
-   (rho = +1.000 on their canonical L=2 bridge) almost verbatim.
-2. **Real noisy GD trajectory** (reusing experiment 4's ridge-regularized run) — same
-   structural correlation, `rho = 1.0000`, holding even off the clean single-direction
-   approach.
+Scope: min-codim equals the RLCT because this zero set is a normal-crossing union of
+smooth linear strata, so the crossing adds multiplicity but no smaller pole. For
+singularities that only resolve after blow-up (r > 1, or nonlinear varieties), the RLCT
+need not be the codimension of any stratum visible in the original coordinates, and this
+estimator would not be expected to work.
 
-**A genuine, explainable difference from the paper's own results, surfaced rather than
-smoothed over**: in both tests, layers h1 (bottleneck) and h2 (output) collapse at the
-*same* rate (`rho(h1, h2) = 1.0000`), whereas the DDS paper reports h1 collapsing while
-h2 ("the dimension-fixed boundary layer") stays flat (their Fig. 2, ~246x collapse at
-h1, <0.3% drift at h2). The difference traces to truth rank: our toy models all have
-**truth rank r0 = 0** (the teacher is the zero matrix), so the *entire* map — both
-layers — must vanish at the true optimum; there is no surviving nonzero signal for h2
-to carry. The paper's own anchor uses r0 >= 1, where the output layer represents that
-real, non-vanishing signal while only the *excess* bottleneck capacity dies. This is
-directly testable, and motivated experiment 8.
+## Experiments 7-9: Dead-Direction Signatures
 
-### Experiment 8: cross-cell rank-tracking (r0 >= 1 required)
+DDS (Shirodkar & Narayanan, arXiv:2606.21158) estimates RLCT structure from closed-form
+spectral reads at a layer ℓ. It does not need a posterior chain. The observables:
+- σ_min(X_ℓ): smallest activation singular value;
+- λ⁺_min(G_ℓ): smallest positive eigenvalue of the per-sample-gradient Fisher-Gram;
+- log det⁺(G_ℓ): log-volume of the active Fisher spectrum.
 
-To test the r0 >= 1 regime, and because our own r>1 RLCT formula is unverified (see the
-"Correction to the source spec" section above), we reused the DDS paper's own **exact**
-14-cell Aoyagi 2005 anchor (M=10, N=5, H in {2,3,4,5}, truth rank r0 in {1,...,min(N,H)},
-Case-3 closed form λ=(NH+M·r0−H·r0)/2 — an external, independently-published ground
-truth, cross-checked here against our own verified r0=0 result within its validity
-region). Code: `rrr_model.py`.
+K = ‖AB‖² is already the two-layer linear network x → Bx (h1) → ABx (h2) with a zero
+teacher. Code: `dds.py`.
 
-Getting a *comparable reference point* across 14 differently-sized cells turned out to
-be the hard part, and is worth documenting since it's a real methodological trap:
+### Experiment 7: the rate claim holds exactly
 
-- **Training to a convergence criterion doesn't work cleanly.** When H > r0, the
-  solution set `{(W1,W2) : W2 W1 = M*}` is itself a positive-dimensional manifold (the
-  H-r0 excess bottleneck directions can rotate/rescale freely), so plain gradient
-  descent has no reason to drive the excess directions to zero specifically — it
-  converges to *some* point on that manifold, and all H bottleneck directions end up
-  with comparably tiny (not cleanly separated) Fisher eigenvalues. A small ridge
-  penalty (matching experiment 4's fix) selects the minimum-norm point and does
-  separate them — but tuning training length against ridge strength is delicate: too
-  little training under-converges; enough additional training under ridge eventually
-  shrinks the *genuine* r0 directions too, undoing the separation. Fixed step counts
-  also left `final_K` spanning ~100x across cells regardless, adding convergence-level
-  noise on top.
-- **The fix**: construct the reference point directly (`exact_branch_point`), exactly
-  as `sample_on_branch` did for the r=1 model — the exact minimum-norm factorization of
-  M* plus a small controlled transverse perturbation, no training loop at all. A second
-  trap surfaced here too: perturbing every weight by the same *per-element* scale pumps
-  more aggregate perturbation into larger-H cells purely from having more entries,
-  producing a spurious cell-size-driven correlation; normalizing to a fixed *total*
-  Frobenius norm removes it.
+The central DDS claim is the structural correlation λ⁺_min(G) ~ σ_min(X)², with both
+vanishing as powers of the distance to the singular set.
+- **Analytic approach** to the {B = 0} branch along a fixed direction: ρ(λ⁺_min(G_h1),
+  σ_min(X_h1)²) = **1.0000**, with both slopes 2.000 (predicted 2). This matches the
+  paper's analytic-limit result (ρ = +1.000).
+- **Along the real ridge-GD trajectory** of experiment 4: ρ = 1.0000.
 
-**Result, honestly mixed rather than forced into a clean story**: the activation-side
-`sigma_min(X_h2)` robustly reproduces the paper's own cross-cell sign and rough
-magnitude (rho = 0.69-0.80 across perturbation scales here vs their +0.895 — same
-sign, comparable order of magnitude). The Fisher-side rate/volume observables
-(`lambda_plus_min`, `log_det_plus`) gave weak, unstable cross-cell correlations
-(rho ~ 0.03-0.47) in this simplified protocol — notably *not* matching the paper's
-strong `-0.978`/`-0.947` readings, even though those exact observables validated
-*perfectly* (rho=1.0) in experiment 7's single-trajectory test. We did not chase this
-further: the DDS paper's own appendix (App. B.4-B.6) devotes several pages to
-numerical-recipe sensitivity in exactly this cross-cell reading (fp32 vs fp64,
-Tikhonov vs no-Tikhonov, per-cell-locked SGLD calibration, n/d>=100 sample-budget
-gates), and frames this specific test as a "sanity gate, not a discriminator" even in
-their own results (a naive `H*r` capacity proxy clears the same bar in their Fig. 3).
-Our simplified, non-calibrated reproduction landing in that same "noisy sanity gate"
-regime for the Fisher-side observables — while its core *rate* claim is exact — seems
-like the honest expected outcome, not evidence the method is wrong.
+One difference from the paper: here h1 and h2 collapse at the same rate (ρ(h1, h2) =
+1.000). In the paper, the output layer stays flat. The reason is truth rank: with a zero
+teacher (r0 = 0) the whole map must vanish, so no surviving signal is left for h2 to
+carry. Experiment 8 moves to r0 ≥ 1.
 
-**Bottom line on DDS (experiments 7-8)**: the rate/structural-correlation claim (their
-most fundamental, most falsifiable prediction) is validated exactly on our toy models.
-The cross-cell magnitude-comparison claim needs either their full calibration protocol
-or a genuinely deeper/wider network (to get past a "sanity gate" that even naive
-proxies clear) to be discriminating — which motivated experiment 9.
+### Experiment 8: DDS across cells with different λ
 
-## Experiment 9: the rank-multiplicative counting identity (deep-linear noisy bridge)
+**Testbed.** The paper's own anchor: reduced-rank regression K = ‖W2W1 − M*‖² with
+M = 10, N = 5, width H ∈ {2,…,5}, truth rank r0 ∈ {1,…,H} (14 cells), and the
+Aoyagi-Watanabe closed form λ = (NH + (M − H)r0)/2. Code: `rrr_model.py`.
 
-The DDS paper's own most *discriminating* claim (not just a sanity-gate rank
-correlation) is the rank-multiplicative volume identity: at a singular point with `r`
-simultaneously-dead directions, `log_det_plus(G)`'s slope (vs log distance-to-the-
-singular-set) is exactly `r` times the rank-1 slope, while `lambda_plus_min(G)`'s slope
-is r-invariant — a genuine "counting" signal no single-eigenvalue monitor can produce.
-Testing this needs layer width >= 2 dead directions at once; none of experiments 1-8
-can touch it (bottleneck width 1 throughout). Code: `deep_linear.py`.
+**Protocol.** Each cell gets 8 localized SGLD chains around the exact minimum-norm
+solution: n = 10⁴, β = 1/log n, γ = 1, 60k burn-in + 60k sampling steps, 30 snapshots per
+chain. The DDS observables are averaged (in log) over snapshots. Two built-in checks:
+- **The ensemble is equilibrated and carries the local geometry.** The sampler's own LLC
+  estimate nβ·E[K] tracks the closed form with ρ = 0.999, ordering all 20 same-width
+  pairs correctly, 5-9% high. Step size matters here: lr = 2·10⁻⁴ overestimates λ by ~40%
+  through Euler discretization in the stiff directions (curvature ~2nβ); lr = 5·10⁻⁵ is
+  used.
+- **Uncertainty.** 95% bootstrap CIs over chains for every ρ.
 
-Construction: an L-layer deep-linear network (`y = W_L(...(W_1 x))`), each `W_i` a
-D x D matrix, teacher `M* = diag(1,...,1,0,...,0)` with the last r entries zero (r
-simultaneous dead directions) — the paper's own "noisy bridge" testbed (their Sec.
-4.2 / App. B.8.2). Every layer is diagonal, `diag(1,...,1,tau,...,tau)`, with r copies
-of a *shared* value `tau` on the dead coordinates: as `tau -> 0` the product converges
-to `M*` exactly. This directly generalizes the L=2 approach validated in experiment 7
-(one shrinking factor) to L layers and r simultaneous dead directions, and per-sample
-Fisher-Gram at each internal layer is computed via the exact same closed-form backprop
-formula already validated in `dds.py` (`delta_ell = delta_L @ P_{ell+1:L}`, downstream
-weight-matrix products — no autograd needed, no training loop, no convergence-criterion
-tuning). Swept over D=20, L in {4,6,8}, r in {1,2,3,4}, tau in [1, 1e-3].
+Only the output layer h2 is compared, because its width N is the same in every cell. h1
+has width H, so its spectra are not comparable across cells.
 
-**Result**: exact agreement, at every (L, layer) combination tested — `log_det_plus`
-slope ratio = r to 4 decimal places (2.0000, 3.0000, 4.0000 for r=2,3,4), zero
-variance across configurations; `lambda_plus_min` slope ratio = 1.0000 exactly,
-r-invariant as predicted.
+![exp8](plots/exp8_dds_cross_cell.png)
 
-**Two things worth being upfront about, so this isn't overclaimed:**
+| Observable (h2) | Spearman ρ vs λ, all 14 cells [95% CI] | Same-H pairs ordered correctly |
+|---|---|---|
+| SGLD LLC nβ·E[K] (reference) | 0.999 | 20/20 |
+| λ⁺_min(G) | 0.64 [0.59, 0.68] | 17/20 |
+| log det⁺(G) | −0.01 [−0.01, −0.01] | 17/20 |
+| σ_min(X) | 0.86 [0.83, 0.86] | 20/20 |
+| σ⁺_min(X) (smallest *positive* singular value) | −0.07 [−0.08, −0.02] | 20/20 |
 
-1. **The exact match is expected, not a surprising discovery.** Because all r dead
-   coordinates are literally identical by construction (same shared `tau`), the r
-   eigenvalues they produce are numerically identical, so `log_det_plus` (which sums
-   log-eigenvalues) is *necessarily* r times the single-eigenvalue value, and
-   `lambda_plus_min` (which reads whichever eigenvalue is smallest) is *necessarily*
-   unaffected by how many identical copies there are. This construction validates that
-   our implementation is bug-free and that the underlying math is self-consistent — the
-   same role the paper's own "canonical bridge, analytic limit" tests play (their
-   ρ=+1.000 exact results) — but it is not an independent empirical stress-test the way
-   their actual noisy-SGD-trained bridge experiments are. A stronger test would use r
-   *independent*, non-identical dead directions with real training noise (their own
-   protocol: full/mini-batch SGD, 5 seeds, canonical-aligned init); that's a natural
-   next increment if this needs to be load-bearing rather than illustrative.
-2. **Our absolute per-layer rate exponents don't match the paper's stated `2(L-ell)`
-   formula.** We independently derive and confirm (empirically, exactly) that our
-   construction gives slope `4L - 2*ell` for `lambda_plus_min(G_ell)` — both formulas
-   decrease by exactly 2 per layer (same qualitative ladder), but ours is offset by a
-   constant `2L`. This traces to a genuine difference in construction: their paper
-   states the canonical-aligned approach as `W_ell(t) = W*_ell + t*delta_ell` (a
-   generic linear-in-t perturbation of every layer around some target `W*`), which we
-   don't have enough detail to reproduce exactly; our "every layer shares the same
-   `tau`, and the *product* converges to `M*`" scheme is a different (but equally
-   principled) canonical-aligned construction that happens to have the same per-layer
-   *pattern* but a different absolute calibration. The relative/counting claim (the
-   actual discriminator) doesn't depend on this and is confirmed regardless.
+**Reading.**
+1. **Within a fixed width H, every DDS observable tracks λ (17-20 of 20 pairs).** At fixed
+   H, λ increases with r0, so this says the observables detect how many bottleneck
+   directions are carrying signal versus dead.
+2. **Across widths, none of them reads λ's magnitude.** The best headline number,
+   σ_min(X_h2) at ρ = 0.86, is a rank artifact. X_h2 = (W2W1x) has rank ≤ H, so for every
+   cell with H < N = 5 its smallest singular value is exactly zero up to floating point
+   (log σ_min ≈ −35 in the plot). The correlation is essentially "H = 5 versus the rest."
+   The rank-safe σ⁺_min removes the artifact and the cross-cell correlation goes to zero.
+   λ⁺_min and log det⁺ also restart their trend at each H (the lines in the plot do not
+   line up), giving ρ = 0.64 and ≈ 0.
+3. **A single constructed point is the wrong reference.** The ablation (exact solution
+   plus a fixed-norm transverse perturbation, 10 seeds per scale) gives cross-cell ρ that
+   barely changes as the scale varies tenfold (λ⁺_min: 0.35, 0.34, 0.29 at scales 0.01,
+   0.1, 0.3). Such a point measures the geometry of the chosen perturbation, not λ. The
+   posterior ensemble is what gives fluctuations whose size is set by the local geometry.
 
-## Connection to the stated larger goal (GNN / ring-5 barrier)
+The paper frames this cross-cell test as a sanity gate rather than its discriminating
+experiment, and this result is consistent with that: DDS here works as a dead-direction
+detector, not a cross-architecture λ estimator. The paper uses the same 14-cell grid, so
+any σ_min reading taken at a layer narrower than its neighbours there is worth checking
+for the same rank effect.
 
-The volume-scaling estimator is the one to carry forward to a real network: it only
-needs forward passes (loss evaluations at randomly perturbed weights), no
-backward-mode SGLD machinery. The one implementation lesson from experiment 4 that
-transfers directly: a local-ratio estimate is only meaningful once the sampling radius
-is small enough to be "local" *and* the current weights are close enough to some
-actual near-minimum for the ball to contain it — track the minimum K value seen in the
-sampling ball (`volumes` in the returned dict lets you check this) as a validity
-diagnostic before trusting a checkpoint's ratio reading.
+### Experiment 9: the rank-multiplicative counting identity
+
+The paper's most discriminating claim is that with r simultaneously dead directions, the
+slope of log det⁺(G) against log distance is r times the rank-1 slope, while λ⁺_min's
+slope does not depend on r. Testing this needs layer width ≥ 2 in dead directions.
+
+Construction: an L-layer deep-linear net with D × D layers and teacher
+diag(1,…,1,0,…,0) (r zeros). Every layer is diag(1,…,1,τ,…,τ) with a shared τ → 0.
+Fisher-Gram per layer is computed in closed form by backprop through downstream products.
+Code: `deep_linear.py`. Swept over D = 20, L ∈ {4, 6, 8}, r ∈ {1,…,4}.
+
+Result: log det⁺ slope ratio = 2.0000, 3.0000, 4.0000 for r = 2, 3, 4, and the λ⁺_min
+ratio = 1.0000, at every (L, layer).
+
+Caveats:
+- **The match holds by construction.** The r dead coordinates share one τ, so their
+  eigenvalues are identical, and the identity follows algebraically. This verifies the
+  implementation and the algebra. It is not a stress test. That would need r independent,
+  non-identical dead directions under SGD noise (the paper's noisy-bridge protocol), the
+  natural next increment.
+- **The per-layer exponents differ.** This construction gives a λ⁺_min(G_ℓ) slope of
+  4L − 2ℓ, versus the paper's 2(L − ℓ). Both drop by 2 per layer. The 2L offset comes from
+  approaching via a shared product parameter rather than the paper's W*_ℓ + tδ_ℓ, whose
+  details aren't specified enough to replicate. The counting ratio does not depend on this.
+
+## Experiment 10: Toy Model of Superposition (reproducing Chen et al. 2023)
+
+Chen, Lau, Mendel, Wei & Murfet, *Dynamical versus Bayesian Phase Transitions in a Toy
+Model of Superposition* (arXiv:2310.06301).
+
+**Model.** f(x) = ReLU(WᵀWx + b), with W ∈ ℝ^{2×6}, b ∈ ℝ⁶ (d = 18), in the high-sparsity
+limit: x = μeᵢ, i uniform, μ ~ U[0, 1]. The loss is L(w) = E‖x − f(x)‖². Critical points
+are regular k-gons: k columns at length l* and angles 2πj/k with bias b*, and the rest
+vestigial (zero column, negative bias, or bias 1/(2c) for the k^{σ+} variants).
+
+**Exact population loss.** For input μeᵢ, output j is ReLU(μ(WᵀW)ᵢⱼ + bⱼ), which is
+active on a sub-interval of [0, 1]. Each term therefore integrates in closed form, so L
+and its gradient are exact and batched with no Monte Carlo or quadrature (checked against
+brute-force quadrature to 10⁻¹¹). Code: `tms.py`.
+
+![exp10](plots/exp10_tms.png)
+
+**(a) Critical points.** Every value matches the paper to its printed precision.
+
+| k-gon | loss (ours) | loss (paper) | ‖∇L‖ | ½‖w*‖² (ours) | ½‖w*‖² (paper) |
+|---|---|---|---|---|---|
+| 4 | 0.11111 | 0.11111 | 0 | 2.00000 | 2 |
+| 4⁺ | 0.10417 | 0.10417 | 1e-17 | 2.00347 | 2.00347 |
+| 5 | 0.06874 | 0.06874 | 3e-6 | 3.62417 | 3.62417 |
+| 5⁺ | 0.06180 | 0.06180 | 3e-6 | 3.62765 | 3.62764 |
+| 6 | 0.04819 | 0.04819 | 2e-6 | 6.37769 | 6.37767 |
+
+The residual gradients of ~10⁻⁶ come from l*, b* being tabulated to 5 digits.
+
+**(b) LLC at the critical points.** Localized SGLD with γ = 0.1, 10 chains, and the
+paper's rule of discarding chains that fall to a lower-loss phase.
+
+| k-gon | theory λ | paper λ̂ (n=5000) | ours, n=5·10³ | n=5·10⁴ | n=5·10⁵ |
+|---|---|---|---|---|---|
+| 5 | 7.0 | 7.71 ± 0.85 | 8.37 ± 1.60 | 7.32 ± 0.50 | **6.90 ± 0.28** |
+| 5⁺ | 8.5 | 9.91 ± 1.27 | 10.67 ± 1.66 | 8.74 ± 0.52 | **8.41 ± 0.39** |
+| 6 | 8.5 | 9.03 ± 0.59 | 9.36 ± 1.41 | 8.53 ± 0.45 | **8.46 ± 0.58** |
+
+At the paper's n = 5000 we see the same upward bias it reports, with the same ordering.
+Raising n (with step size scaled down to match) drives every estimate to the theoretical
+value within error. So the bias at n = 5000 is a finite-n effect of the β = 1/log n
+estimator, not a sampler failure. This also resolves a puzzle in the paper's table: there
+the 5⁺-gon reads above the 6-gon, though both have λ = 8.5, and at large n they coincide.
+
+One detail mattered: the 5-gon's vestigial bias must be strictly negative. At exactly 0,
+the dead column sits on the boundary of a lower-loss chamber, every SGLD chain escapes,
+and none survive the filter at n ≥ 5·10⁴.
+
+**(c) Bayesian phase transition.** The free energies cross where n·ΔL + Δλ·log n + Δc = 0.
+With ΔL from (a), Δλ = 1.5, and Δc from the prior terms, the 5 → 6 transition is at
+**n_cr = 601**, matching the paper's 601 (445 if the constant term is dropped). Every input is computed here from (a) and the
+theoretical λ, not taken from the paper's tables.
+
+**(d) Dynamical transitions.** This is the paper's Sec. 5 protocol: 30 SGD runs (n = 1000
+samples, batch 20, lr 0.005, 4500 epochs) from a 4-gon plus N(0, 0.01²) noise, with an LLC
+estimate at every 30th epoch (ε = 10⁻³, γ = 1, 500 steps).
+- 95% of the 4530 checkpoints sit within 3·10⁻⁴ of a k-gon loss level: 4 (1207), 4⁺
+  (1635), 4⁺⁺ (785), 5 (667). Only 236 are in transit.
+- The middle panel is a 4 → 4⁺ → 5 trajectory, the same sequence as the paper's Fig. 1.
+  Loss drops in steps and λ̂ rises in steps ("opposing staircases": ≈4.3 on the 4⁺ plateau,
+  ≈6.7 on the 5-gon).
+- The right panel reproduces the paper's Fig. 3 ordering: lower-loss plateaus have higher
+  λ̂. λ̂ on the 5-gon plateau reads below 7, as expected from 500-step chains at
+  ε = 10⁻³. Like the paper, we use these short-chain estimates only for ordering.
+
+Not reproduced: the paper's NUTS posterior-occupancy plot (Fig. 2), which samples the
+global posterior at each n and classifies samples by k. That needs a well-mixed sampler
+across k-gon basins rather than local SGLD. It is the natural next addition, and (c) gives
+the target (5 → 6 near n ≈ 600).
+
+## What carries forward
+
+- **Local λ estimates are only meaningful at a near-minimum** (experiment 4). Checking
+  that the sampling region actually contains low-loss points is the cheap validity test.
+- **SGLD LLC bias decomposes cleanly.** Step-size discretization in stiff directions
+  (experiment 8: 40% → 5%) and finite-n corrections (experiment 10: 8.4 → 6.9 for a λ = 7
+  point as n goes 5·10³ → 5·10⁵) account for the overshoot seen in experiments 1-3 and in
+  Chen et al.'s Table K.1.
+- **Spectral (DDS-style) reads detect dead directions, but are not dimension-free λ
+  estimators** (experiments 7-9 vs 8). Any cross-model comparison has to control for layer
+  rank.
+- **Geometric estimators (Hessian codim, volume scaling) are exact on normal-crossing
+  geometry** (experiments 1-6). The open question that motivates this repo is whether
+  higher-order jet/contact data extends that to singularities needing resolution. The TMS
+  k-gons (minimally singular for k < c, non-analytic at the 4-gon) are a concrete next
+  testbed with known λ.

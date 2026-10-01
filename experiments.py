@@ -3,6 +3,7 @@ n != m, testing the multi-restart min-codim fix to the Hessian estimator).
 Experiment 7 adds Dead-Direction Signatures (Shirodkar & Narayanan 2606.21158)
 as a further estimator, validated on the same r=1 toy models."""
 import numpy as np
+import torch
 
 from model import (
     true_lambda, dim_w, make_K, make_K_torch, make_K_regular,
@@ -13,7 +14,8 @@ from estimators import (
     sgld_llc_estimator, arc_direction_estimator,
 )
 from dds import dds_observables
-from rrr_model import aoyagi_2005_anchor_cells, train_rrr_cell, exact_branch_point, make_teacher
+from rrr_model import aoyagi_2005_anchor_cells, exact_branch_point, make_teacher
+import tms
 from deep_linear import canonical_layers, make_teacher_diag, dds_observables_deep
 
 
@@ -316,64 +318,112 @@ def experiment_7(seed=6, r=1, n=2, m=2, n_dds_samples=20_000):
     }
 
 
-def experiment_8(M=10, N=5, scale=0.03, n_dds_samples=20_000, seed=7):
-    """Cross-cell DDS rank-tracking against closed-form RLCT, on the DDS
-    paper's own 14-cell Aoyagi 2005 anchor (M=10, N=5, H in {2,3,4,5},
-    truth rank r0 in {1,...,min(N,H)}), reusing their exact ground truth
-    rather than our own (unverified for H>1) formula.
-
-    Reference points are constructed directly via exact_branch_point
-    (minimum-norm exact fit + a small controlled transverse perturbation),
-    not by gradient descent: an earlier version of this experiment trained
-    each cell to a convergence criterion, but final_K varied ~100x across
-    cells despite matched hyperparameters, and made-up for that with ad
-    hoc ridge/step tuning that never cleanly separated the "genuine"
-    r0-dimensional signal from the "excess" (H-r0)-dimensional dead
-    directions (see train_rrr_cell's docstring). The direct construction
-    avoids that confound entirely.
-
-    Finding (see RESULTS.md for full discussion): the activation-side dual
-    sigma_min(X_h2) robustly reproduces the paper's own cross-cell sign and
-    rough magnitude (positive correlation with lambda, |rho| ~ 0.7-0.8 here
-    vs their +0.895). The Fisher-side rate/volume observables
-    (lambda_plus_min, log_det_plus) give weak/inconsistent cross-cell
-    correlations in this simplified, non-SGLD-calibrated protocol, even
-    though those same observables validated perfectly (rho=1.0) in
-    experiment_7's single-trajectory rate test. This is reported as a
-    genuine, protocol-sensitive finding, not resolved further here: the
-    DDS paper's own appendix (App B.4-B.6) devotes substantial space to
-    exactly this kind of numerical-recipe sensitivity for the cross-cell
-    reading, and it is explicitly framed there as a "sanity gate," not
-    their discriminating test (which requires H>=2 layers of *depth*, not
-    just bottleneck width -- see the "next steps" discussion).
-    """
-    cells = aoyagi_2005_anchor_cells(M=M, N=N)
-    rows = []
-    for i, cell in enumerate(cells):
-        H, r0 = cell["H"], cell["r0"]
-        rng = np.random.default_rng(seed + i)
-        W1, W2 = exact_branch_point(M, N, H, r0, scale=scale, rng=rng)
-        M_star = make_teacher(N, M, r0)
-        obs = dds_observables(W2, W1, N=n_dds_samples, target=M_star,
-                               rng=np.random.default_rng(seed + 1000 + i))
-        rows.append({**cell, **obs})
-
+def _cross_cell_rho(per_cell, lam_true, names):
     from scipy.stats import spearmanr
-    lam_true = np.array([r["lambda_true"] for r in rows])
-    observable_names = ["lambda_plus_min_h1", "lambda_plus_min_h2",
-                         "log_det_plus_h1", "log_det_plus_h2",
-                         "sigma_min_h1", "sigma_min_h2"]
-    cross_cell_rho = {}
-    for name in observable_names:
-        vals = np.array([r[name] for r in rows])
-        rho, _ = spearmanr(vals, lam_true)
-        cross_cell_rho[name] = rho
+    return {n: float(spearmanr(per_cell[n], lam_true)[0]) for n in names}
+
+
+def experiment_8(M=10, N=5, n_chains=8, n_boot=500, seed=7, scales=(0.01, 0.1, 0.3),
+                 n_ablation_seeds=10, n_dds_samples=5_000):
+    """Cross-cell DDS rank-tracking against closed-form RLCT on the 14-cell
+    Aoyagi-Watanabe grid (M=10, N=5, H in {2,...,5}, truth rank r0 in
+    {1,...,min(N,H)}; lambda = (NH + (M-H) r0)/2).
+
+    Main protocol: read the DDS observables off a localized SGLD *posterior
+    ensemble* around the exact minimum-norm solution (rrr_model.sgld_rrr_chains),
+    averaging log-observables over snapshots and chains. Two checks come with it:
+      - the sampler's own LLC estimate n*beta*E[K] must recover the closed-form
+        lambda (it does: rho ~ 0.999, 5-9% high), so the ensemble is
+        equilibrated and its fluctuations carry the local geometry;
+      - bootstrap CIs over chains for every cross-cell rho.
+    Only the output layer h2 (width N, fixed across cells) is compared across
+    cells; h1 has width H, so its spectrum is not comparable between cells.
+
+    Ablation: the same readings at a single hand-constructed point (exact
+    solution + a fixed-Frobenius-norm transverse perturbation). Its cross-cell
+    rho is the same at every perturbation scale, i.e. it reflects the geometry
+    of the perturbation, not lambda.
+    """
+    from rrr_model import sgld_rrr_chains, exact_branch_point
+    from scipy.stats import spearmanr
+    cells = aoyagi_2005_anchor_cells(M=M, N=N)
+    lam_true = np.array([c["lambda_true"] for c in cells])
+    names = ["lambda_plus_min_h2", "log_det_plus_h2", "sigma_min_h2", "sigma_plus_min_h2"]
+
+    # --- main: posterior ensemble ---
+    per_chain = {n: np.zeros((len(cells), n_chains)) for n in names}
+    llc_hat = np.zeros((len(cells), n_chains))
+    for i, cell in enumerate(cells):
+        lam_hat, snaps, T = sgld_rrr_chains(M, N, cell["H"], cell["r0"], chains=n_chains,
+                                            seed=seed + i)
+        llc_hat[i] = lam_hat
+        vals = {n: [[] for _ in range(n_chains)] for n in names}
+        for W1, W2 in snaps:
+            for k in range(n_chains):
+                o = dds_observables(W2[k], W1[k], N=n_dds_samples, target=T,
+                                    rng=np.random.default_rng(seed))
+                vals["lambda_plus_min_h2"][k].append(np.log(o["lambda_plus_min_h2"]))
+                vals["log_det_plus_h2"][k].append(o["log_det_plus_h2"])
+                vals["sigma_min_h2"][k].append(np.log(o["sigma_min_h2"]))
+                vals["sigma_plus_min_h2"][k].append(np.log(o["sigma_plus_min_h2"]))
+        for n in names:
+            per_chain[n][i] = [np.mean(v) for v in vals[n]]
+
+    point = {n: per_chain[n].mean(1) for n in names}
+    llc_mean = llc_hat.mean(1)
+    rho = _cross_cell_rho(point, lam_true, names)
+    rho_llc = float(spearmanr(llc_mean, lam_true)[0])
+
+    # within-H pairwise concordance: cells with the same width H share every
+    # layer dimension, so this comparison is free of dimension artifacts
+    H_arr = np.array([c["H"] for c in cells])
+
+    def within_H(v):
+        conc = tot = 0
+        for h in np.unique(H_arr):
+            idx = np.where(H_arr == h)[0]
+            for i in idx:
+                for j in idx:
+                    if lam_true[i] < lam_true[j]:
+                        tot += 1
+                        conc += v[i] < v[j]
+        return int(conc), int(tot)
+
+    within = {n: within_H(point[n]) for n in names}
+    within["llc"] = within_H(llc_mean)
+
+    rng = np.random.default_rng(seed)
+    boot = {n: [] for n in names}
+    for _ in range(n_boot):
+        idx = rng.integers(0, n_chains, size=(len(cells), n_chains))
+        for n in names:
+            v = np.take_along_axis(per_chain[n], idx, axis=1).mean(1)
+            boot[n].append(spearmanr(v, lam_true)[0])
+    rho_ci = {n: (float(np.nanpercentile(boot[n], 2.5)), float(np.nanpercentile(boot[n], 97.5)))
+              for n in names}
+
+    # --- ablation: single constructed point, several perturbation scales ---
+    ablation = {}
+    for scale in scales:
+        rhos = {n: [] for n in names}
+        for s in range(n_ablation_seeds):
+            obs_rows = []
+            for i, cell in enumerate(cells):
+                rg = np.random.default_rng(seed + 1000 * s + i)
+                W1, W2 = exact_branch_point(M, N, cell["H"], cell["r0"], scale=scale, rng=rg)
+                obs_rows.append(dds_observables(W2, W1, N=n_dds_samples, rng=rg,
+                                                target=make_teacher(N, M, cell["r0"])))
+            for n in names:
+                rhos[n].append(spearmanr([r[n] for r in obs_rows], lam_true)[0])
+        ablation[scale] = {n: float(np.mean(v)) for n, v in rhos.items()}
 
     return {
-        "tag": f"Experiment 8 (DDS cross-cell rank-tracking, Aoyagi 2005 anchor, "
+        "tag": f"Experiment 8 (DDS cross-cell rank-tracking, Aoyagi-Watanabe grid, "
                f"M={M}, N={N}, {len(cells)} cells)",
-        "cells": cells, "rows": rows, "cross_cell_rho": cross_cell_rho,
-        "lambda_true": lam_true,
+        "cells": cells, "lambda_true": lam_true, "observables": names,
+        "per_cell_mean": point, "cross_cell_rho": rho, "cross_cell_rho_ci": rho_ci,
+        "llc_hat": llc_mean, "llc_rel_err": (llc_mean - lam_true) / lam_true,
+        "rho_llc": rho_llc, "ablation_rho": ablation, "within_H_concordance": within,
     }
 
 
@@ -458,6 +508,92 @@ def experiment_9(D=20, Ls=(4, 6, 8), rs=(1, 2, 3, 4), n_taus=15, n_dds_samples=2
         "D": D, "Ls": list(Ls), "rs": list(rs), "taus": taus,
         "per_L": per_L, "ratio_summary": ratio_summary,
     }
+
+
+def experiment_10(llc_ns=(5_000, 50_000, 500_000), n_traj=30, epochs=4500, seed=10,
+                  record_every=30):
+    """Reproduce the core findings of Chen et al. (arXiv:2310.06301) on the
+    Toy Model of Superposition, r=2 hidden dims, c=6 inputs.
+
+    (a) The k-gon critical points: exact population loss, gradient norm, and
+        prior factor 1/2*||w*||^2 against the paper's tabulated values.
+    (b) Theoretical LLCs (7, 8.5, 8.5 for 5, 5+, 6) vs localized-SGLD
+        estimates at several n -- the n=5000 row is the paper's Table K.1
+        protocol; larger n shows the residual bias is a finite-n effect.
+    (c) Critical sample sizes of the Bayesian phase transitions from the
+        free-energy crossing n*dL + dlam*log n + dc = 0.
+    (d) SGD trajectories (paper Sec. 5 protocol) initialized at a 4-gon plus
+        N(0, 0.01^2) noise: loss plateaus at k-gon levels, with the SGLD LLC
+        estimate rising as loss falls ("opposing staircases").
+    """
+    out = {"tag": "Experiment 10 (Toy Model of Superposition, r=2, c=6; Chen et al. 2023)"}
+
+    # (a) critical points
+    cases = [("4", 4, 0), ("4+", 4, 1), ("5", 5, 0), ("5+", 5, 1), ("6", 6, 0)]
+    paper_L = {"4": 1 / 9, "4+": 0.10417, "5": 0.06874, "5+": 0.06180, "6": 0.04819}
+    paper_prior = {"4": 2.0, "4+": 2.00347, "5": 3.62417, "5+": 3.62764, "6": 6.37767}
+    crit = {}
+    for name, k, npos in cases:
+        W, b = tms.kgon(k, n_pos=npos, vestigial_bias=0.0)
+        w = tms.pack(torch.tensor(W[None]), torch.tensor(b[None])).requires_grad_(True)
+        L = tms.loss_flat(w)
+        g, = torch.autograd.grad(L.sum(), w)
+        # prior factor counts only the k-gon block and positive biases (vestigial
+        # negative biases are free and contribute >= 0, so this is the paper's
+        # lower bound for those)
+        prior = 0.5 * ((W ** 2).sum() + (b[:k] ** 2).sum() + (b[k:][b[k:] > 0] ** 2).sum())
+        crit[name] = {"loss": L.item(), "paper_loss": paper_L[name],
+                      "grad_norm": g.norm().item(), "prior": float(prior),
+                      "paper_prior": paper_prior[name]}
+    out["critical_points"] = crit
+
+    # (b) LLC estimates vs theory
+    theory = {"5": 7.0, "5+": 8.5, "6": 8.5}
+    paper_hat = {"5": 7.705, "5+": 9.906, "6": 9.027}
+    steps_for = {5_000: (1e-5, 50_000), 50_000: (1e-6, 100_000), 500_000: (1e-7, 200_000)}
+    llc = {}
+    for name, k, npos in [c for c in cases if c[0] in theory]:
+        # vestigial bias strictly negative (-1): at exactly 0 the dead column sits
+        # on the boundary of a lower-loss chamber and SGLD chains escape into it
+        W, b = tms.kgon(k, n_pos=npos, vestigial_bias=-1.0)
+        w = tms.pack(torch.tensor(W[None]), torch.tensor(b[None]))
+        row = {"theory": theory[name], "paper_hat_n5000": paper_hat[name], "est": {}}
+        for n in llc_ns:
+            eps, steps = steps_for[n]
+            m, sd, kept, _ = tms.sgld_llc(w, n=n, gamma=0.1, eps=eps, steps=steps,
+                                          burn=steps // 5, seed=seed)
+            row["est"][n] = {"mean": m, "std": sd, "kept": kept}
+        llc[name] = row
+    out["llc"] = llc
+
+    # (c) critical sample sizes
+    def dd(a, bb):
+        return (crit[bb]["loss"] - crit[a]["loss"], theory_all[bb] - theory_all[a],
+                crit[bb]["prior"] - crit[a]["prior"])
+    theory_all = {"5": 7.0, "6": 8.5}
+    out["n_crit"] = {
+        "5->6": {"ours": tms.critical_sample_size(*dd("5", "6")), "paper": 601},
+    }
+    dL, dlam, dc = dd("5", "6")
+    out["n_crit"]["5->6"]["terms"] = {"dL": dL, "dlam": dlam, "dc": dc}
+    out["n_crit"]["5->6"]["no_constant"] = tms.critical_sample_size(dL, dlam, 0.0)
+
+    # (d) SGD trajectories
+    torch.manual_seed(seed)
+    W, b = tms.kgon(4, vestigial_bias=0.0)
+    w0 = tms.pack(torch.tensor(W[None]), torch.tensor(b[None])).repeat(n_traj, 1)
+    w0 = w0 + 0.01 * torch.randn_like(w0)
+    rw, eps_rec, Ltraj = tms.sgd_trajectories(w0, epochs=epochs, record_every=record_every, seed=seed)
+    T, S, d = rw.shape
+    lam_hat = tms.sgld_llc_points(rw.reshape(T * S, d), seed=seed).reshape(T, S)
+    ref_levels = {"4": 1 / 9, "4+": 0.10417, "4++": 0.09722, "5": 0.06874,
+                  "5+": 0.06180, "6": 0.04819}
+    near = np.full((T, S), "", dtype=object)
+    for nm, lv in ref_levels.items():
+        near[np.abs(Ltraj.numpy() - lv) < 3e-4] = nm
+    out["sgd"] = {"epochs": eps_rec, "loss": Ltraj.numpy(), "lam_hat": lam_hat,
+                  "near": near, "ref_levels": ref_levels}
+    return out
 
 
 def format_table(exp):

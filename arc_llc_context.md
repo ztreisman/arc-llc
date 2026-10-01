@@ -1,6 +1,6 @@
 # Arc-Space LLC Estimator: Toy Implementation
 
-original spec, preserved as-is; see RESULTS.md for corrections including to the ground-truth formula
+*Original project spec, kept for reference. Some details (including the general ground-truth formula) were revised during implementation; RESULTS.md has the final versions.*
 
 ## Goal
 

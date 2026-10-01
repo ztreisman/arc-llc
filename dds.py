@@ -76,8 +76,15 @@ def dds_observables(A, B, N=20_000, rel_tol=1e-10, rng=None, target=None):
     lam_h1, logdet_h1, eig_h1 = _smallest_positive_eig_and_logdet(G_h1, rel_tol)
     lam_h2, logdet_h2, eig_h2 = _smallest_positive_eig_and_logdet(G_h2, rel_tol)
 
-    sigma_min_h1 = float(np.linalg.svd(hidden, compute_uv=False).min())
-    sigma_min_h2 = float(np.linalg.svd(output, compute_uv=False).min())
+    sv_h1 = np.linalg.svd(hidden, compute_uv=False)
+    sv_h2 = np.linalg.svd(output, compute_uv=False)
+    sigma_min_h1 = float(sv_h1.min())
+    sigma_min_h2 = float(sv_h2.min())
+    # sigma_min is exactly 0 (up to fp noise) whenever the layer's activations
+    # are rank-deficient by construction -- e.g. X_h2 has rank <= r < n. The
+    # smallest *positive* singular value is the rank-safe reading, using the
+    # same relative cutoff as lambda_plus_min (on sigma^2, so sqrt(rel_tol)).
+    sigma_plus_min_h2 = float(sv_h2[sv_h2 > np.sqrt(rel_tol) * sv_h2.max()].min())
 
     return {
         "lambda_plus_min_h1": lam_h1,
@@ -86,6 +93,7 @@ def dds_observables(A, B, N=20_000, rel_tol=1e-10, rng=None, target=None):
         "lambda_plus_min_h2": lam_h2,
         "log_det_plus_h2": logdet_h2,
         "sigma_min_h2": sigma_min_h2,
+        "sigma_plus_min_h2": sigma_plus_min_h2,
         "eigenvalues_h1": eig_h1,
         "eigenvalues_h2": eig_h2,
     }

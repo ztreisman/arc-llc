@@ -8,37 +8,24 @@ distribution (the zero matrix). Its zero set W0 = {AB = 0} is a
 singular variety (union of the linear subspaces {A=0} and {B=0}
 when r=1).
 
-NOTE ON GROUND TRUTH (correction to arc_llc_context.md): the source spec
-states a general formula lambda = r(n+m-r)/2, but this contradicts its own
-worked zeta-function derivation for r=1, n=m=2 (which explicitly computes
-a pole at z=-1, i.e. lambda=1, not r(n+m-r)/2 = 3/2). The r(n+m-r)/2
-formula is the Aoyagi-Watanabe RLCT for *reduced-rank regression*
-(y = BAx + noise, with an extra integral over an input distribution for
-x) -- a related but different model from the plain Frobenius-norm loss
-K = ||AB||_F^2 implemented here, which has no x to integrate over.
-
-For the r=1 case actually used throughout this project, ζ(z) factors as
-independent radial integrals over a (in R^n) and b (in R^m):
-    zeta(z) = [int ||a||^{2z} da] * [int ||b||^{2z} db]
-each of which has a pole at z=-n/2 and z=-m/2 respectively (order 1, from
-the radial integral rho^{2z+k-1} drho). The RLCT is given by the
-rightmost (least negative) pole:
+Ground truth (r=1): zeta(z) = int K(w)^z dw factors into independent radial
+integrals over a in R^n and b in R^m,
+    zeta(z) = [int ||a||^{2z} da] * [int ||b||^{2z} db],
+with simple poles at z=-n/2 and z=-m/2. The RLCT is the rightmost pole:
     lambda = min(n, m) / 2,  multiplicity 2 iff n == m, else 1.
-This matches the doc's own two worked examples exactly (n=m=1 -> 1/2,
-n=m=2 -> 1) and is independently confirmed here by all four estimators,
-including the exact analytic Hessian null-space computation (see
-RESULTS.md). The general r > 1 case has not been re-derived here (no
-experiment in this project instantiates r > 1); r(n+m-r)/2 is left in
-place for that branch but should be treated as unverified for this loss.
+Every estimator in this project recovers this value, including the exact
+analytic Hessian computation. (The r(n+m-r)/2 formula sometimes quoted for
+this family is the reduced-rank-regression RLCT, a different model with an
+input distribution over x; r > 1 is not used here.)
 """
 import numpy as np
 import torch
 
 
 def true_lambda(r, n, m):
-    if r == 1:
-        return min(n, m) / 2.0
-    return r * (n + m - r) / 2.0
+    if r != 1:
+        raise NotImplementedError("ground truth derived for r=1 only; see rrr_model.py for r0>0 teachers")
+    return min(n, m) / 2.0
 
 
 def dim_w(r, n, m):
