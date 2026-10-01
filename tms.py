@@ -23,6 +23,11 @@ DT = torch.float64
 
 def population_loss(W, b):
     """W: (B, r, c), b: (B, c) -> (B,) exact population loss."""
+    return onehot_terms(W, b).sum(-1) / W.shape[-1]
+
+
+def onehot_terms(W, b):
+    """(B, c): entry i is E_mu ||mu e_i - f(mu e_i)||^2 (sum over outputs), exact."""
     c = W.shape[-1]
     g = W.transpose(-1, -2) @ W                      # (B, c, c), g[i, j] = W_i . W_j
     # component j of the output for input mu*e_i: ReLU(mu*g[i,j] + b[j]).
@@ -47,7 +52,48 @@ def population_loss(W, b):
     p = a - G
     active = p ** 2 * (hi ** 3 - lo ** 3) / 3 - p * bj * (hi ** 2 - lo ** 2) + bj ** 2 * length
     inactive = a ** 2 * (1.0 / 3 - (hi ** 3 - lo ** 3) / 3)
-    return (active + inactive).sum((-1, -2)) / c
+    return (active + inactive).sum(-1)
+
+
+_MULTI_CACHE = {}
+
+
+def _multi_patterns(c, n_qmc, seed=0):
+    """All gate patterns with >= 2 active features, each with a fixed set of
+    scrambled-Sobol points in [0,1]^{|S|} (cached, so the loss is a deterministic
+    smooth-almost-everywhere function of w -- usable inside SGLD)."""
+    key = (c, n_qmc, seed)
+    if key not in _MULTI_CACHE:
+        from itertools import combinations
+        from scipy.stats import qmc
+        pats = []
+        for k in range(2, c + 1):
+            for S in combinations(range(c), k):
+                pts = qmc.Sobol(k, scramble=True, seed=seed + 1000 * k + sum(S)).random(n_qmc)
+                X = np.zeros((n_qmc, c))
+                X[:, list(S)] = pts
+                pats.append((len(S), torch.tensor(X, dtype=DT)))
+        _MULTI_CACHE[key] = pats
+    return _MULTI_CACHE[key]
+
+
+def population_loss_bernoulli(W, b, p=0.05, n_qmc=4096):
+    """Population loss for param-decomp's `at_least_zero_active` TMS data: each of
+    the c features independently active with probability p, value U[0,1].
+    Loss convention matches their pretraining objective, mean over features of
+    (x - relu(W^T W x + b))^2. Exact for 0 or 1 active features (closed form);
+    quasi-Monte Carlo for >= 2 active (total weight ~2% at p=0.05, c=5).
+    W: (B, r, c), b: (B, c) -> (B,)."""
+    c = W.shape[-1]
+    q = 1 - p
+    empty = (torch.relu(b) ** 2).sum(-1)                    # all-zero input
+    one = onehot_terms(W, b).sum(-1)                         # sum over which feature is on
+    tot = q ** c * empty + p * q ** (c - 1) * one
+    g = W.transpose(-1, -2) @ W
+    for k, X in _multi_patterns(c, n_qmc):
+        out = torch.relu(X[None] @ g + b[:, None, :])        # (B, n, c)
+        tot = tot + p ** k * q ** (c - k) * ((X[None] - out) ** 2).sum(-1).mean(-1)
+    return tot / c
 
 
 def population_loss_np(W, b):
@@ -122,7 +168,7 @@ def count_vertices(W, tol=0.1):
 
 
 def sgld_llc(w_star, n=5000, gamma=0.1, eps=5e-5, steps=10_000, chains=10, burn=0,
-             seed=0, r=2, c=6, escape_frac=0.05, noise_scale=1.0):
+             seed=0, r=2, c=6, escape_frac=0.05, noise_scale=1.0, loss_fn=None):
     """Localized SGLD estimate of the local learning coefficient at w_star
     (devinterp-style, on the exact population loss):
         lambda_hat = n*beta*(E[L(w)] - L(w*)),  beta = 1/log n,
@@ -131,11 +177,14 @@ def sgld_llc(w_star, n=5000, gamma=0.1, eps=5e-5, steps=10_000, chains=10, burn=
     Following the paper's Appendix K protocol, a chain is discarded if more
     than `escape_frac` of its samples have loss below L(w*) (it has fallen
     into a lower-loss phase and is no longer measuring this critical point).
+    `loss_fn(w) -> (B,)` defaults to the one-hot population loss `loss_flat`.
     Returns (lambda_hat, std over kept chains, n_kept, per-chain estimates).
     """
+    if loss_fn is None:
+        loss_fn = lambda w: loss_flat(w, r, c)
     g = torch.Generator().manual_seed(seed)
     w0 = w_star.clone().detach().reshape(1, -1).to(DT)
-    L0 = loss_flat(w0, r, c).item()
+    L0 = loss_fn(w0).item()
     nb = n / np.log(n)
     w = w0.repeat(chains, 1).clone()
     acc = torch.zeros(chains, dtype=DT)
@@ -143,7 +192,7 @@ def sgld_llc(w_star, n=5000, gamma=0.1, eps=5e-5, steps=10_000, chains=10, burn=
     cnt = 0
     for t in range(steps):
         w.requires_grad_(True)
-        L = loss_flat(w, r, c)
+        L = loss_fn(w)
         grad, = torch.autograd.grad(L.sum(), w)
         with torch.no_grad():
             drift = nb * grad + gamma * (w - w0)

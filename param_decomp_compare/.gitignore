@@ -1,0 +1,4 @@
+# extracted weights/CI matrices, numeric outputs and logs are regenerable; see RESULTS.md
+*.npz
+*.json
+*.log
