@@ -134,6 +134,9 @@ the data and is not tested here.
    length can then track λ, track the Hessian rank, or track neither. Note that the
    Hessian rank is a **lower** bound on 2λ (degenerate directions contribute fractional
    amounts), so it undercounts there rather than overcounts.
+   **Done, in [`rrr/RESULTS.md`](rrr/RESULTS.md) (pre-registered, 28 runs).** SPD tracks
+   the Hessian rank exactly in every run. It finds r0 components whatever the excess
+   capacity, while 2λ grows by N − r0 per extra hidden unit.
 
 ## Files
 
