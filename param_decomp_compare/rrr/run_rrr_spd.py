@@ -1,4 +1,4 @@
-"""Run param-decomp's SPD (JAX trainer, unmodified) on a two-layer linear
+"""Run param-decomp's VPD (JAX trainer, unmodified) on a two-layer linear
 reduced-rank-regression target y = W2 W1 x, then score the decomposition.
 
 Run with param-decomp's venv (see PREREGISTRATION.md for the protocol):

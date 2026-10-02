@@ -50,7 +50,8 @@ with parameter decomposition (see below).
 ## Does parameter decomposition track the LLC?
 
 This asks whether the LLC could serve as a minimum-description-length target for
-parameter decomposition. It compares λ with the decompositions found by SPD, using
+parameter decomposition. It compares λ with the decompositions found by VPD
+(adVersarial Parameter Decomposition; Bushnaq et al. 2026, the successor to SPD), using
 Goodfire's `param-decomp` implementation, on targets where λ is known. Both studies were
 pre-registered, with predictions hashed before any run.
 
@@ -60,14 +61,14 @@ pre-registered, with predictions hashed before any run.
     λ = 10.5, both Morse–Bott. SGLD gives λ̂ = 7.38 ± 0.69.
   - **Only a calibration case.** At a Morse–Bott point λ is half the Hessian rank, so any
     parameter count agrees with it.
-  - **SPD can beat the ground truth.** An importance-minimality sweep shows SPD recovering
+  - **VPD can beat the ground truth.** An importance-minimality sweep shows VPD recovering
     the ground-truth decomposition only at ×1/3 of the default coefficient. At the default
     it merges two near-antipodal features into one component, a description shorter than
     the ground truth.
 - **Reduced-rank regression** ([`param_decomp_compare/rrr/RESULTS.md`](param_decomp_compare/rrr/RESULTS.md)).
   Here λ and the Hessian rank come apart: unused hidden capacity raises λ but not the
-  Hessian rank. In all 28 runs SPD finds exactly r0 components regardless of hidden width,
-  so its description length equals the **Hessian rank**, not 2λ (off by up to 16). SPD
+  Hessian rank. In all 28 runs VPD finds exactly r0 components regardless of hidden width,
+  so its description length equals the **Hessian rank**, not 2λ (off by up to 16). VPD
   counts the function; λ also charges for the degenerate geometry of unused capacity.
 
 ![spd vs llc](param_decomp_compare/rrr/spd_vs_llc.png)
@@ -95,6 +96,6 @@ Runs all 10 experiments (~10 min on CPU), prints result tables, and writes `plot
 | `experiments.py` | Experiments 1-10 |
 | `plots.py`, `main.py` | Plotting; run everything |
 | `RESULTS.md` | Write-up |
-| `param_decomp_compare/` | LLC vs SPD parameter decomposition: pre-registrations, drivers, write-ups (TMS 5→2; `rrr/` for reduced-rank regression). Requires a `param-decomp` checkout; see each RESULTS.md |
+| `param_decomp_compare/` | LLC vs VPD parameter decomposition: pre-registrations, drivers, write-ups (TMS 5→2; `rrr/` for reduced-rank regression). Requires a `param-decomp` checkout; see each RESULTS.md |
 | `notes/dds_arc.tex` | Note relating DDS to the arc-space picture |
 | `arc_llc_context.md` | Original project spec |

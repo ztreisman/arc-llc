@@ -101,3 +101,11 @@ N + H < M + r0. That gives **19 cells**.
   width 1. This cell has H = r0, so it has no excess capacity and is not a discriminating
   cell. It is excluded rather than patched.
 - **Remaining:** 14 cells × 2 coefficients = 28 runs, all H ≥ 2 and r0 ≥ 1.
+
+## Terminology amendment (2026-10-02; no protocol change)
+
+The method was called "SPD" above. The param-decomp trainer and configs used here
+implement **VPD** (adVersarial Parameter Decomposition, Bushnaq et al. 2026). VPD is SPD
+plus an adversarial reconstruction loss (`MergedStochasticSubsetPPGDReconLoss`) and
+frequency minimality, both of which are in the configs run. Read "SPD" as "VPD"
+throughout. Predictions, definitions and runs are unchanged.

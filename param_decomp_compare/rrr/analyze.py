@@ -1,4 +1,4 @@
-"""Score the RRR SPD runs against PREREGISTRATION.md (P1-P3)."""
+"""Score the RRR VPD runs against PREREGISTRATION.md (P1-P3)."""
 import glob
 import os
 

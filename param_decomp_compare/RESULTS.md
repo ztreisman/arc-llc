@@ -97,11 +97,11 @@ Against the pre-registered prediction:
 DL_A = 2λ = 14 holds at every run that keeps all five features (×1/27 through ×3). That
 follows from the definition of Rule A, so it carries no evidence. The rule is blind to
 splitting (below ×1/3) and to merging (×1, ×3). DL_raw follows both, and has a plateau at
-59 across ×1-×3, the setting SPD's minimality actually prefers.
+59 across ×1-×3, the setting VPD's minimality actually prefers.
 
-## Exploratory: SPD decomposes the untied model, whose λ is 10.5
+## Exploratory: VPD decomposes the untied model, whose λ is 10.5
 
-SPD decomposes `linear1` and `linear2` as independent matrices. The model it describes is
+VPD decomposes `linear1` and `linear2` as independent matrices. The model it describes is
 therefore the *untied* f = ReLU(W₂W₁x + b), with 25 parameters and a GL(2) gauge. At the
 target (W₂ = W₁ᵀ):
 
@@ -109,7 +109,7 @@ target (W₂ = W₁ᵀ):
 - the Hessian has rank 21 of 25: four zero modes (exactly GL(2)), no negative directions.
 
 So this is again Morse–Bott, with **λ_untied = 10.5**. The tied rule 3k − 1 counts the
-wrong model for SPD. The untied analogue is 5k − 4 = 21, from 2 + 2 hidden coordinates
+wrong model for VPD. The untied analogue is 5k − 4 = 21, from 2 + 2 hidden coordinates
 plus a bias per feature, minus the 4-dimensional gauge. That rule was formed after seeing
 the data and is not tested here.
 
@@ -120,10 +120,10 @@ the data and is not tested here.
    non-degenerate parameters agrees with it by construction, and agreement here is
    evidence of nothing beyond correct counting.
 2. **The useful finding is a mismatch in kind, not in number.** At its default
-   coefficient SPD prefers a description with fewer components than the ground truth.
+   coefficient VPD prefers a description with fewer components than the ground truth.
    It merges two near-antipodal features through the ReLU, which is valid on the
-   single-feature inputs SPD's minimality is effectively measured on. λ is a property of
-   the target and does not change across the sweep. So λ cannot be the quantity SPD's
+   single-feature inputs VPD's minimality is effectively measured on. λ is a property of
+   the target and does not change across the sweep. So λ cannot be the quantity VPD's
    minimality is tracking; at most it is a fixed reference that one regime of the sweep
    (×1/3) happens to sit at. Whether the merged description is "wrong" depends on
    whether rare multi-feature inputs (~2% of data at p = 0.05) are reconstructed. This
@@ -134,7 +134,7 @@ the data and is not tested here.
    length can then track λ, track the Hessian rank, or track neither. Note that the
    Hessian rank is a **lower** bound on 2λ (degenerate directions contribute fractional
    amounts), so it undercounts there rather than overcounts.
-   **Done, in [`rrr/RESULTS.md`](rrr/RESULTS.md) (pre-registered, 28 runs).** SPD tracks
+   **Done, in [`rrr/RESULTS.md`](rrr/RESULTS.md) (pre-registered, 28 runs).** VPD tracks
    the Hessian rank exactly in every run. It finds r0 components whatever the excess
    capacity, while 2λ grows by N − r0 per extra hidden unit.
 

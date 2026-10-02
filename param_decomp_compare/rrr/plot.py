@@ -1,4 +1,4 @@
-"""Figure: SPD's function-level description length vs 2*lambda and Hessian rank, by H."""
+"""Figure: VPD's function-level description length vs 2*lambda and Hessian rank, by H."""
 import glob, os
 import matplotlib
 matplotlib.use("Agg")
@@ -21,12 +21,12 @@ for r0 in range(1, 6):
             ax.scatter(np.array(h) + (0.06 if mk == "x" else -0.06), v, marker=mk, color=c, s=40, zorder=5)
 ax.plot([], [], "k-", lw=2, label="2λ (Aoyagi-Watanabe)")
 ax.plot([], [], "k:", lw=1.5, label="Hessian rank r0(M+N−r0)")
-ax.scatter([], [], marker="o", color="k", label="SPD, default minimality")
-ax.scatter([], [], marker="x", color="k", label="SPD, ×1/3 minimality")
+ax.scatter([], [], marker="o", color="k", label="VPD, default minimality")
+ax.scatter([], [], marker="x", color="k", label="VPD, ×1/3 minimality")
 ax.set_xlabel("hidden width H (excess capacity H − r0)")
 ax.set_ylabel("parameter count")
 ax.set_xticks(range(2, 6))
-ax.set_title("Reduced-rank regression (M=10, N=5): SPD's description length\n"
+ax.set_title("Reduced-rank regression (M=10, N=5): VPD's description length\n"
              "follows the Hessian rank, not 2λ, as capacity grows", fontsize=10)
 handles, labels = ax.get_legend_handles_labels()
 keep = [i for i, l in enumerate(labels) if not l.startswith("r0=") or l.endswith("2λ")]

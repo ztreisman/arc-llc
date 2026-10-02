@@ -97,3 +97,11 @@ disagree with 2λ, and recording it shows the rule matters.
   `torch.set_num_threads(2)`. No estimates had been produced.
 - **P2 already read.** The existing run `p-e78416be` was opened after the freeze and
   before this amendment. P2 is evaluated on it as pre-registered, below.
+
+## Terminology amendment (2026-10-02; no protocol change)
+
+The method was called "SPD" above. The param-decomp trainer and configs used here
+implement **VPD** (adVersarial Parameter Decomposition, Bushnaq et al. 2026). VPD is SPD
+plus an adversarial reconstruction loss (`MergedStochasticSubsetPPGDReconLoss`) and
+frequency minimality, both of which are in the configs run. Read "SPD" as "VPD"
+throughout. Predictions, definitions and runs are unchanged.
