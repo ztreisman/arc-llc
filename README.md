@@ -50,8 +50,8 @@ with parameter decomposition (see below).
 ## Does parameter decomposition track the LLC?
 
 This asks whether the LLC could serve as a minimum-description-length target for
-parameter decomposition. It compares λ with the decompositions found by Goodfire's SPD
-(the `param-decomp` codebase), on targets where λ is known. Both studies were
+parameter decomposition. It compares λ with the decompositions found by SPD, using
+Goodfire's `param-decomp` implementation, on targets where λ is known. Both studies were
 pre-registered, with predictions hashed before any run.
 
 - **TMS 5→2** ([`param_decomp_compare/RESULTS.md`](param_decomp_compare/RESULTS.md)).
