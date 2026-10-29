@@ -1,5 +1,5 @@
 """Step 0 of the contact-hierarchy plan: test the "tangent excess" reading of the
-RRR gap (context file, section 4f).
+RRR gap (NOTEBOOK.md 4f, 4g).
 
 Claim: 2*lambda - rank H(w) = dim T_w Z - dim_w Z, where Z = {W2 W1 = M*}. At the
 min-norm point Z's components meet and every Hessian observable undercounts. At a

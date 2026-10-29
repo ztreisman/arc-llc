@@ -1,5 +1,8 @@
 # arc-llc
 
+How well can the local learning coefficient of a singular model be read off cheaply, and
+what does the arc-space (contact-locus) picture of singularities say about the answer?
+
 Estimators of the RLCT / local learning coefficient (LLC) λ, tested on singular models
 where λ is known in closed form:
 
@@ -17,18 +20,18 @@ transitions of Chen et al. (arXiv:2310.06301).
 
 The geometric estimators are motivated by Mustață's jet-scheme characterization of log
 canonical thresholds (arXiv:math/0102201): the RLCT is determined by dimensions of contact
-loci in arc space, and the Hessian null space is the first-order contact data. The
-longer-term question is whether higher-order jet/contact statistics give cheaper or more
-informative LLC estimators than sampling.
+loci in arc space, and the Hessian null space is the first-order contact data.
+[`arc/`](arc/) pursues that picture directly (see below).
 
-See [`RESULTS.md`](RESULTS.md) for the full write-up of the estimator experiments, and
+See [`RESULTS.md`](RESULTS.md) for the full write-up of the estimator experiments,
 [`param_decomp_compare/`](param_decomp_compare/) for a pre-registered comparison of the LLC
-with parameter decomposition (see below).
+with parameter decomposition, and [`arc/README.md`](arc/README.md) for the arc-space
+results.
 
 ## Highlights
 
-- **Ground truth recovered** on matrix factorization by volume scaling and the Hessian
-  estimator (within 2-8%; the Hessian is exact) and by SGLD (5-9% on the singular cases).
+- **Ground truth recovered** on matrix factorization: the Hessian estimator exactly,
+  volume scaling within 2-8%, and SGLD within 5-9% on the singular cases.
   A multi-restart min-codim fix makes the Hessian estimator exact on asymmetric branches,
   where a single read is up to 4× off (experiments 1-6).
 - **Toy Model of Superposition** (experiment 10). Exact closed-form population loss.
@@ -46,6 +49,27 @@ with parameter decomposition (see below).
   a layer-rank artifact.
 
 ![tms](plots/exp10_tms.png)
+
+## Arc spaces: what the Hessian misses, and λ by counting arcs
+
+[`arc/README.md`](arc/README.md) has the details and status of each claim.
+
+- **Reduced-rank regression, exactly.** Counting arcs by their Smith normal form
+  reproduces the full Aoyagi–Watanabe formula, including its odd/even case split, which
+  becomes integer minimization of a quadratic.
+- **What the Hessian misses is tangent excess, not higher-order contact.** On RRR, λ is
+  half the codimension of the largest component of the true set. All components meet at
+  the minimum-norm solution, which is where ridge-regularized training, DDS and VPD read
+  the model. There the Hessian rank falls short of 2λ by (H − r0)(N − r0). At generic
+  true points it doesn't: the minimum Hessian rank over unregularized restarts recovers
+  2λ on all 14 cells.
+- **Deep linear networks.** A direct arc-space proof that rlct = codim/2 at depth 3 (outer
+  Smith forms plus a totally unimodular linear program). Previously this followed only by
+  comparing Pepin Lehalleur–Rimányi's codimension with Aoyagi's formula. Depth ≥ 4 is
+  open.
+- **Real vs complex.** The complex threshold that arc-space theorems compute can be
+  strictly below λ. Symmetric factorization WWᵀ is a natural example, and there the gap
+  is genuine quartic contact. Counting real arcs is the robust formulation.
 
 ## Does parameter decomposition track the LLC?
 
@@ -70,18 +94,21 @@ pre-registered, with predictions hashed before any run.
   Hessian rank. In all 28 runs VPD finds exactly r0 components regardless of hidden width,
   so its description length equals the **Hessian rank**, not 2λ (off by up to 16). VPD
   counts the function; λ also charges for the degenerate geometry of unused capacity.
+  The target was the minimum-norm solution, the point where that geometry is invisible
+  to any second-order reading ([`arc/`](arc/README.md), §2).
 
 ![spd vs llc](param_decomp_compare/rrr/spd_vs_llc.png)
 
 ## Quickstart
 
 ```bash
-pip install torch numpy scipy matplotlib
+pip install torch numpy scipy matplotlib "jax[cpu]"
 python3 main.py
 ```
 
-Runs all 10 experiments (~10 min on CPU), prints result tables, and writes `plots/*.png`,
-`results/summary.json`, `results/tables.md`.
+`main.py` runs experiments 1-10 (~10 min on CPU), prints result tables, and writes
+`plots/*.png`, `results/summary.json`, `results/tables.md`. The scripts in `arc/` run
+individually (`python arc/rrr_orbit.py`, etc.). jax is only needed for `arc/`.
 
 ## Files
 
@@ -97,5 +124,6 @@ Runs all 10 experiments (~10 min on CPU), prints result tables, and writes `plot
 | `plots.py`, `main.py` | Plotting; run everything |
 | `RESULTS.md` | Write-up |
 | `param_decomp_compare/` | LLC vs VPD parameter decomposition: pre-registrations, drivers, write-ups (TMS 5→2; `rrr/` for reduced-rank regression). Requires a `param-decomp` checkout; see each RESULTS.md |
-| `notes/dds_arc.tex` | Note relating DDS to the arc-space picture |
-| `arc_llc_context.md` | Original project spec |
+| `arc/` | Arc-space / contact-locus results: RRR and deep-linear λ by arc counting, tangent excess, real vs complex. See `arc/README.md` |
+| `notes/dds_arc.tex` | Note relating DDS to the arc-space picture, and where they diverge |
+| `arc_llc_context.md` | Original project spec (superseded where noted) |

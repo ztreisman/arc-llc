@@ -33,9 +33,11 @@ with simple poles at z = −n/2 and z = −m/2, so
 
     λ = min(n, m) / 2,   multiplicity 2 iff n = m.
 
-(The r(n+m−r)/2 formula sometimes quoted for this family is the RLCT of reduced-rank
-*regression*, which integrates over an input distribution; that model is used in
-experiment 8 with its own closed form.)
+(The r(n+m−r)/2 formula sometimes quoted for this family is a different case. With
+isotropic inputs, ‖AB‖² *is* reduced-rank regression with a zero teacher, whose λ is
+given by Aoyagi–Watanabe and equals min(n, m)/2 only for inner dimension r = 1.
+r(n+m−r)/2 is reduced-rank regression's λ when the teacher has rank r and the hidden
+width is r. Experiment 8 uses reduced-rank regression with its closed form.)
 
 ## Experiments 1-3: estimators against ground truth
 
@@ -104,11 +106,14 @@ Which branch GD reaches is set by the conserved quantity ‖A‖² − ‖B‖²
 The lower-codim branch is the more likely outcome from random init when n ≠ m (62-99% per
 run across the pairs tried), so ~20 restarts suffice.
 
-Scope: min-codim equals the RLCT because this zero set is a normal-crossing union of
-smooth linear strata, so the crossing adds multiplicity but no smaller pole. For
-singularities that only resolve after blow-up (r > 1, or nonlinear varieties), the RLCT
-need not be the codimension of any stratum visible in the original coordinates, and this
-estimator would not be expected to work.
+Scope: min-codim equals the RLCT here because this zero set is a normal-crossing union
+of smooth linear strata, so the crossing adds multiplicity but no smaller pole. In
+general the RLCT need not be the codimension of any stratum visible in the original
+coordinates, and this estimator can fail; the cusp (a² − b³)² is an example. It does
+extend further than this note originally expected. For reduced-rank regression and
+deep linear networks the RLCT is half the codimension of the largest component of the
+true set, so min-codim over unregularized restarts recovers λ there too. It needs enough
+restarts to reach the largest component ([`arc/README.md`](arc/README.md), §2-3).
 
 ## Experiments 7-9: Dead-Direction Signatures
 
@@ -183,7 +188,11 @@ has width H, so its spectra are not comparable across cells.
 
 The paper frames this cross-cell test as a sanity gate rather than its discriminating
 experiment, and this result is consistent with that: DDS here works as a dead-direction
-detector, not a cross-architecture λ estimator. The paper uses the same 14-cell grid, so
+detector, not a cross-architecture λ estimator. A structural reason is given in
+[`arc/`](arc/README.md) (§2). The minimum-norm solution sampled here is where all
+components of the true set meet. The part of λ contributed by unused capacity is then
+tangent excess, not dead directions of higher order. That is not something a
+second-order spectral reading at that point measures. The paper uses the same 14-cell grid, so
 any σ_min reading taken at a layer narrower than its neighbours there is worth checking
 for the same rank effect.
 
@@ -294,7 +303,8 @@ the target (5 → 6 near n ≈ 600).
   estimators** (experiments 7-9 vs 8). Any cross-model comparison has to control for layer
   rank.
 - **Geometric estimators (Hessian codim, volume scaling) are exact on normal-crossing
-  geometry** (experiments 1-6). The open question that motivates this repo is whether
-  higher-order jet/contact data extends that to singularities needing resolution. The TMS
-  k-gons (minimally singular for k < c, non-analytic at the 4-gon) are a concrete next
-  testbed with known λ.
+  geometry** (experiments 1-6). Whether contact-locus (arc-space) data extends this is
+  taken up in [`arc/`](arc/README.md). On reduced-rank regression, the Hessian's shortfall
+  turns out to be tangent excess at the minimum-norm point, not higher-order contact. The
+  TMS k-gons are Morse–Bott at their analytic minima (λ = Hessian rank / 2), so they
+  calibrate estimators but cannot separate them.

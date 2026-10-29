@@ -1,6 +1,9 @@
 # Arc-Space LLC Estimator: Toy Implementation
 
-*Original project spec, kept for reference. Some details (including the general ground-truth formula) were revised during implementation; RESULTS.md has the final versions.*
+*Original project spec, kept for reference. Some details were revised during
+implementation; RESULTS.md has the final versions. In particular, the ground-truth
+formula λ = r(n+m−r)/2 below is wrong for this model. The correct value for r = 1 is
+min(n, m)/2, so n = m = 2 gives λ = 1, not 3/2.*
 
 ## Goal
 

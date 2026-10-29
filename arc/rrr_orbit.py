@@ -1,4 +1,4 @@
-"""RRR RLCT from the fiber ideal by orbit counting (context file, section 5 step 1).
+"""RRR RLCT from the fiber ideal by orbit counting (NOTEBOOK.md 4f).
 
 K(A, B) = ||BA - M*||_F^2, B in R^{N x H}, A in R^{H x M}, rank M* = r0.
 Fiber ideal a = (entries of BA - M*). Claim: rlct = lct(a) / 2, and lct(a) is

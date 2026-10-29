@@ -1,10 +1,15 @@
-# arc-llc: Contact Hierarchy Estimation of the RLCT
+# Arc-space notebook: reading the RLCT from contact loci
 
-Context file for continuing work in `github.com/ztreisman/arc-llc`. The repo already
-contains volume scaling, Hessian null space (with multi-restart min-codim fix), SGLD,
-DDS, reduced-rank regression (RRR), deep-linear, Toy Model of Superposition (TMS), and a
-pre-registered LLC vs VPD comparison. This file covers the newer arc-space line: reading
-the RLCT from contact loci, and why it now targets a specific gap the repo has measured.
+**This is a working notebook, kept chronologically. For the results, start with
+[`README.md`](README.md) in this folder.** Sections 1-3 record the starting hypotheses;
+some were later revised, and each revision is marked where it applies. Section 4 holds
+the results, 4a-4k in the order they were obtained.
+
+The rest of the repo covers volume scaling, Hessian null space (with the multi-restart
+min-codim fix), SGLD, DDS, reduced-rank regression (RRR), deep-linear, the Toy Model of
+Superposition (TMS), and a pre-registered LLC vs VPD comparison. This notebook covers the
+arc-space line: reading the RLCT from contact loci, aimed at a specific gap the repo
+measured.
 
 ---
 
@@ -19,14 +24,17 @@ Three independent cheap observables all track the FUNCTION and miss part of lamb
   regardless of hidden width, so its description length equals the Hessian rank, not
   2*lambda (off by up to 16).
 
-The gap **2*lambda - rank(H)** is the contribution of unused capacity, i.e. of directions
-where K vanishes to order > 2. In arc-space terms it is exactly **higher-order contact
-data**. Goal: an estimator or exact computation that reads this gap, validated on the RRR
-grid where lambda is known in closed form (Aoyagi-Watanabe, already in `rrr_model.py`).
+The gap **2*lambda - rank(H)** is the contribution of unused capacity. The starting
+hypothesis was that it is **higher-order contact data** (directions where K vanishes to
+order > 2). Goal: an estimator or exact computation that reads this gap, validated on
+the RRR grid where lambda is known in closed form (Aoyagi-Watanabe, in `rrr_model.py`).
+
+**Revised (4f/4g):** for RRR the gap is not higher-order contact. It is tangent excess
+at the min-norm point, where components of the true set meet.
 
 ---
 
-## 2. The working principle: fiber ideal, not real arcs
+## 2. Starting principle: the fiber ideal (revised in 4i)
 
 Write K locally as a sum of squares K = sum_i f_i^2 and let a = (f_1, ..., f_r) be the
 fiber ideal. Then (expected, see caveats):
@@ -40,16 +48,14 @@ the complex Mustață / Ein-Lazarsfeld-Mustață contact-locus formula,
 
     lct(a) = min_p  codim Cont^{>=p}(a) / p ,   codim taken in J_{p-1}.
 
-This **supersedes** the earlier "real contact conjecture" (counting real arcs of K). Both
-agree on all test cases, but the ideal version pushes the R vs C issue into a single
-checkable condition (real centers of the minimizing divisors) and makes the computation
-honest complex algebraic geometry.
+The original plan treated this as superseding the "real contact conjecture" (counting
+real arcs of K), since the ideal version reduces the R vs C issue to one checkable
+condition (real centers of the minimizing divisors). **Revised (4i):** that condition
+genuinely fails in natural examples, and real arc counting is the robust formulation.
 
-**Probably known.** Shaowei Lin's thesis (Berkeley 2011, "Algebraic Methods for
-Evaluating Integrals in Bayesian Statistics") develops RLCTs of ideals / fiber ideals.
-Check his normalization against the factor of 2 before claiming anything as new.
+The fiber-ideal RLCT and its factor of 2 are Shaowei Lin's (4h).
 
-Exact confirmations (all consistent with both formulations):
+Exact confirmations (consistent with both formulations):
 
 | K | ideal a | lct(a) | lct(a)/2 | rlct |
 |---|---|---|---|---|
@@ -66,15 +72,18 @@ with cross-cancellation, which is exactly RRR.
 
 ---
 
-## 3. Conventions (several were wrong earlier)
+## 3. Conventions
 
 - Jet of order p-1: gamma(t) = c_0 + c_1 t + ... + c_{p-1} t^{p-1}, base point c_0 free.
   J_{p-1}(R^d) has dimension d*p. Normalize codim by p, codim taken in J_{p-1}.
   Sanity check: x^k gives codim ceil(p/k), min over p is 1/k at p = k.
 - No factor of 2 between lct and rlct in general. The 2 comes from writing K as squares:
-  rlct(f^2) = rlct(f)/2, and rlct(sum f_i^2) = lct(a)/2.
-- Rank-r Frobenius loss ||AB||^2 has rlct min(n,m)/2; the formula r(n+m-r)/2 belongs to
-  RRR (Aoyagi-Watanabe), which integrates over inputs x.
+  rlct(f^2) = rlct(f)/2, and rlct(sum f_i^2) = RLCT_R(a)/2 (Lin; see 4h, 4i for when
+  the complex lct can replace RLCT_R).
+- ||AB||^2 with inner dimension r (zero teacher) is RRR with r0 = 0 and H = r, for
+  isotropic inputs. Its lambda is given by Aoyagi-Watanabe. It equals min(n,m)/2 for
+  r = 1 but not in general: n = m = r = 2 gives 3/2, not 1. The formula r(n+m-r)/2 is
+  RRR's lambda when the teacher has rank r and H = r (no excess capacity).
 - Hessian estimator on asymmetric branches: the larger branch (smaller codim) gives the
   right answer; min codim over restarts is the fix (already in repo).
 
@@ -107,11 +116,11 @@ incomplete primitive coverage; TaylorDiff.jl is the maintained alternative.
 ### 4d. Design C: jet deepening / lifting (WORKS on demo)
 Optimize higher jet coefficients through `jet`. On K = (b - a^2)^2 at 0 with u_1 = (1,0):
 linear arc has order 4; deepening recovers u_2 ≈ (0, 0.975) (true lift (0,1)).
-This is the lifting question of Treisman, "Rationally generated arcs" (math/0610134),
-and is something DDS structurally cannot see.
+This is the lifting question of Treisman, "Rationally generated arcs" (math/0610134).
+A purely linear (directional) reading cannot see it. Code: `early/design_C_demo.py`.
 
 ### 4e. Design C + D numeric estimator (FAILS, needs redesign)
-Witness search + projection + local PCA (`contact_dim.py`). Acceptance by S < 1e-14 is
+Witness search + projection + local PCA (`early/contact_dim.py`). Acceptance by S < 1e-14 is
 not scale-aware: S vanishes to high order, so x^4 is "accepted" off the variety
 (PCA overcounts) and x^2+y^2+z^2 never finds a witness. Jacobian rank is not a fix
 (undercounts over R). Lower priority now that section 2 gives an exact algebraic route.
@@ -139,8 +148,9 @@ local dimension of Z at a singular point:
 
 The min-norm (ridge-selected) point is where the components of the variety of complexes
 meet, so every Hessian-based observable undercounts there. At a generic point of the
-largest component, rank H = 2*lambda. lct = codim is special here (the variety of
-complexes is reduced with rational singularities). It fails in general, e.g. (a, b^3).
+largest component, rank H = 2*lambda. lct = codim is special here. Why is open:
+plausibly because the variety of complexes has mild (rational) singularities, but no
+reference proves it. It fails in general, e.g. (a, b^3).
 
 ### 4g. Step 0: tangent excess confirmed on all 14 anchor cells (`arc/step0_tangent_excess.py`)
 Components of Z are labelled by the excess ranks (alpha, beta) of (W1, W2), with
@@ -171,6 +181,66 @@ rank H = r0(N+M-r0) + N'alpha + M'beta - alpha*beta. In case 3 the largest compo
 - Not in Lin: jets, arcs, contact loci, RRR. What is new here is the orbit / contact
   computation (4f), the tangent-excess explanation of the observable gap (4g), and the
   real-vs-complex analysis (4i).
+
+### 4h'. Literature on the orbit derivation (searched 2026-10-10)
+- Pepin Lehalleur & Rimanyi, "Geometry of fibers of the multiplication map of deep
+  linear neural networks", arXiv:2411.19920 (v2 Dec 2024). Closest prior work. Quiver
+  representations give codim C and the component count theta of {A_1...A_L = B} for any
+  depth (Poincare series, a quadratic integer program, an explicit formula). Rank-r
+  targets reduce to r = 0 (their Lemmas 4.5-4.6, same reduction as ours). Real points
+  are Zariski dense (Thm 3.3). Their Thm 8.6, rlct = C/2, is NOT proved independently:
+  they compare C with Aoyagi's formula (Aoyagi, Neural Networks 172 (2024) 106132,
+  proved by blow-ups). The Pith review flags this dependency and a gap in Thm 6.1 (lace
+  diagrams). No arcs, jets, Smith form, Hessian rank, or min-norm discussion.
+- Nothing found that derives RRR's lambda from arc spaces / contact loci / GL(C[[t]])
+  orbits. Docampo and Zhu (jet schemes) treat determinantal varieties and W^r_d loci,
+  not the multiplication map.
+- So our 4f is plausibly the first DIRECT proof of rlct = codim/2 for two layers,
+  with the parity case. It is independent of Aoyagi and gives PLR's Thm 8.6 at L = 2.
+  (Aoyagi's formula is checked against all of this in 4h''.)
+
+### 4h''. PLR's QIP vs ours, and depth 3 (`arc/deep_linear_orbit.py`)
+- PLR Thm 6.1 (QIP): sort d' increasing; e in N^N with sum e = d'_0; minimize
+  G = sum_{1<=j<=i<=N} e_i (e_j + d'_j - d'_{j-1}). At N = 2 this is
+  e^2 - e(d'_0 + d'_1 - d'_2) + d'_0 d'_1. When M' is the largest dim it equals our g
+  under e = s - k. Other orderings agree via permutation invariance.
+  Numerically: QIP = PLR Thm 5.5 series = min_k g, in C AND theta, on all 343 vectors
+  in [1,7]^3.
+- Depth 3, new arc argument. A_3 and A_1 share no vertex, so put both in Smith form
+  (lambda, nu); the basis changes act on A_2 by a volume-preserving map, so A_2 stays
+  generic and contact becomes entrywise: ord (A_2)_ij >= p - lambda_i - nu_j. Then
+  codim/p = F(x,y) = sum x_i(|d3-d2|+2i-1) + sum y_j(|d1-d0|+2j-1)
+  + sum_ij max(0, 1-x_i-y_j). As an LP with slacks the constraints are
+  [bipartite incidence | I], totally unimodular, so the min is integral: p = 1,
+  lct_C = C = min_{a,b} a(|d3-d2|+a) + b(|d1-d0|+b) + (s3-a)(s1-b).
+  Real: RLCT_R >= lct_C (real log resolution) and RLCT_R <= codim of the real zero set
+  = C (the minimizing strata are real), so rlct = C/2 at depth 3, independent of Aoyagi.
+  Assumed, not proved here: Docampo's stratum codims (checked numerically), the
+  r0 -> 0 reduction for lct (PLR prove it for codim), and the standard real-vs-complex
+  inequality.
+  Numerically: QIP = series = min F in (C, theta) on all 625 vectors in [1,5]^4; the LP
+  relaxation never goes below the integer min; Jacobian rank of the jet scheme <= p*F
+  on all 108 strata tested, with equality on every minimizing stratum. (Over-killed
+  strata sit inside bigger components and show lower rank, as expected.)
+- Aoyagi (arXiv:2501.12747, which restates the 2024 result and extends it
+  to biases, ReLU, softmax). Def 4 / Thm 4 checked by `arc/aoyagi_compare.py`: lambda
+  equals our smooth part + C_PLR/2 on every case through depth 5 (about 6,800 cases,
+  r = 0 and r > 0).
+  Her theta (pole order) = a(l-a)+1. PLR's theta (component count) = C(l,a) in every
+  case spot-checked. They agree for l <= 3 and first differ at depth 4, e.g.
+  (2,2,2,2,2): 5 vs 6.
+- Pole order from arcs (`arc/deep_laces.py`): with the COMPLETE depth-3 stratification
+  (Smith A3, Smith A1, entrywise A2), the number of strata with codim = pC grows as
+  (p+1)(p+2)/2 when theta = 3, and stays 1 when theta = 1. That is p^(theta-1): arcs
+  read the pole order at depth 3, consistent with Aoyagi. Monomial (lace-with-exponent)
+  strata miss non-monomial minimizers already at depth 3: (2,2,2,2) gives 3p instead of
+  the triangular numbers. So they cannot settle theta at depth 4, where
+  (2,2,2,2,2) monomial counts are 6, 20, 42.
+- Depth >= 4: open. Pairwise non-adjacent matrices (e.g. A_4 and A_2) can be put in
+  Smith form simultaneously, leaving alternating chains D X D Y with generic X, Y. The
+  next step needs classifying a matrix arc relative to a lattice t^alpha (parahoric /
+  Iwahori double cosets: monomial normal forms = permutation times t-powers). Then
+  check whether the resulting LP is still integral.
 
 ### 4i. Step 3: the complex formula fails; real arcs do not (`arc/real_vs_complex.py`)
 RLCT_R(a) >= lct_C(a). lct_C depends on the chosen representation; RLCT_R does not.
@@ -281,23 +351,23 @@ mechanism (4i), where DDS's additive 1/4-per-direction count is right.
 
 ---
 
-## 7. Files from the arc-space session (not yet in repo)
+## 7. Files (paths relative to `arc/`)
 
 | file | purpose | status |
 |---|---|---|
-| `arc_hierarchy.py` | Design A + Design B | B is a negative result |
-| `x4_check.py` | exact demo of Design B failure | done |
-| `jet_test.py` | pins `jet` convention | done |
-| `design_C_demo.py` | jet lifting on (b - a^2)^2 | done |
-| `real_contact_check.py` | exact order arithmetic table | done; superseded by section 2 framing |
-| `contact_dim.py` | numeric C + D estimator | broken, see 4e |
-| `arc/rrr_orbit.py` | RRR lct by orbit counting vs Aoyagi-Watanabe | done, see 4f |
-| `arc/step0_tangent_excess.py` | tangent-excess test on 14 anchor cells | done, see 4g |
-| `arc/real_vs_complex.py` | complex fiber-ideal failures, symmetric lambda | done, see 4i |
-| `arc/contact_gn.py` | Design E numerical real contact loci | partial, see 4k |
-| `arc/README.md` | index of arc/ | |
-
-Suggest adding under `arc/` with a short README pointing here.
+| `early/arc_hierarchy.py` | Designs A and B | B is a negative result (4b) |
+| `early/x4_check.py` | exact demo of Design B failure | done |
+| `early/jet_test.py` | pins the `jet` convention | done |
+| `early/design_C_demo.py` | jet lifting on (b - a^2)^2 | done (4d) |
+| `early/real_contact_check.py` | exact order-arithmetic table | done |
+| `early/contact_dim.py` | numeric C + D estimator | broken (4e); replaced by `contact_gn.py` |
+| `rrr_orbit.py` | RRR lct by orbit counting vs Aoyagi-Watanabe | done (4f) |
+| `step0_tangent_excess.py` | tangent-excess test on the 14 anchor cells | done (4g) |
+| `real_vs_complex.py` | complex fiber-ideal failures, symmetric lambda | done (4i) |
+| `deep_linear_orbit.py` | PLR QIP vs ours; depth-3 arc proof | done (4h'') |
+| `aoyagi_compare.py` | Aoyagi's deep-linear formula vs PLR | done (4h'') |
+| `deep_laces.py` | monomial strata; depth-3 pole order | done (4h'') |
+| `contact_gn.py` | Design E: numerical real contact loci | partial (4k) |
 
 ---
 
@@ -307,13 +377,26 @@ Suggest adding under `arc/` with a short README pointing here.
 - Ein, Lazarsfeld, Mustață, "Contact loci in arc spaces", arXiv:math/0303268
 - Docampo, "Arcs on determinantal varieties", Trans. AMS 365 (2013), arXiv:1011.1930
 - Yuen, "Jet schemes of determinantal varieties", arXiv:math/0608632
-- S. Lin, "Algebraic Methods for Evaluating Integrals in Bayesian Statistics",
-  PhD thesis, UC Berkeley, 2011
+- S. Lin, "Ideal-Theoretic Strategies for Asymptotic Approximation of Marginal
+  Likelihood Integrals", J. Algebraic Statistics 8 (2017), arXiv:1003.5338
+  (from his thesis, "Algebraic Methods for Evaluating Integrals in Bayesian Statistics",
+  UC Berkeley, 2011)
+- M. Saito, "On real log canonical thresholds", arXiv:0707.2308
 - Aoyagi, Watanabe, "Stochastic complexities of reduced rank regression in Bayesian
   estimation", Neural Networks 18(7), 2005
+- M. Aoyagi, "Consideration on the learning efficiency of multiple-layered neural
+  networks with linear units", Neural Networks 172 (2024) 106132
+- M. Aoyagi, "Singular leaning coefficients and efficiency in learning theory",
+  arXiv:2501.12747 (restates the 2024 deep-linear formula)
+- S. Pepin Lehalleur, R. Rimanyi, "Geometry of fibers of the multiplication map of deep
+  linear neural networks", arXiv:2411.19920
+- M. Drton, E. Gross, D. Kosta, A. Leykin, A. McCormack, S. Sullivant, D. Windisch,
+  "Singular Learning Theory for Factor Analysis", arXiv:2511.15419
 - Shirodkar, "Dead Directions: Geometric Singular Learning", arXiv:2606.05957
 - T. P. Shirodkar, P. J. Narayanan, "Dead-Direction Signatures: A Cheap Spectral Reading
-  of Singular Complexity", arXiv:2606.21158 (authors confirmed by the user, 2026-10-08)
+  of Singular Complexity", arXiv:2606.21158
+- T. P. Shirodkar, "Measuring Dead Directions: Decomposing and Classifying Singular
+  Structure off Canonical Alignment", arXiv:2607.00603
 - Chen et al., Toy Model of Superposition phase transitions, arXiv:2310.06301
 - Lau et al., "The Local Learning Coefficient", arXiv:2308.12108
 - Watanabe, "A Widely Applicable Bayesian Information Criterion", arXiv:1208.6338

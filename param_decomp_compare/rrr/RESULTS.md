@@ -60,7 +60,7 @@ Which one does param-decomp's VPD decomposition follow?
 **Matrix factorization (r0 = 0)** cannot be run (Amendment 2). The exact target is
 W₁ = W₂ = 0, and param-decomp refuses to decompose a zero matrix. That outcome points the
 same way: VPD has nothing to describe, and its description length is 0, while
-λ = min(n, m)/2 > 0 (2λ = 5-20 on this grid). The H = 1 cells hit a trainer sharding bug
+λ = NH/2 > 0 (2λ = 5, 10, 15, 20 for H = 1-4; this equals min(n, m)/2 only at H = 1). The H = 1 cells hit a trainer sharding bug
 and are excluded; they have no excess capacity.
 
 ## Interpretation
@@ -69,9 +69,12 @@ and are excluded; they have no excess capacity.
   r0 rank-1 pieces, however many unused hidden units the network carries. The unused
   units get zero weight, so no component spends causal importance on them.
 - **λ is a property of the parameterization around the function.** Unused capacity
-  creates degenerate, quartic directions in the loss. These add to λ, by (N − r0)/2 per
-  extra hidden unit, even though nothing is computed with them. The Hessian is blind to
-  those directions, which is why it agrees with VPD here.
+  adds to λ, by (N − r0)/2 per extra hidden unit, even though nothing is computed with
+  it. At the minimum-norm target the loss is quartic in those directions, so the Hessian
+  is blind to them, which is why it agrees with VPD here. The arc-space analysis
+  ([`../../arc/README.md`](../../arc/README.md), §2) makes this precise: the
+  minimum-norm point is where all components of the solution set meet, and λ is half the
+  codimension of the largest one.
 - **So on this testbed VPD tracks the Hessian rank, not λ.** Read as a description
   length (λ log n bits in SLT's free energy), λ charges *partially* for unused capacity.
   Each degenerate direction costs less than a regular parameter but more than nothing,
@@ -89,10 +92,13 @@ and are excluded; they have no excess capacity.
   dense Gaussian inputs, VPD's minimality has nothing to separate between inputs. What the
   runs test is that VPD's actual optimizer, CI function and losses realize the
   theoretical minimum and keep no excess components alive. At both coefficients they do.
-- **Only the minimum-norm target was used.** A target elsewhere on the solution manifold
-  (e.g. GD without ridge, excess units non-zero but cancelled by W₂) has a different local
-  λ. The excess components would then be causally inert rather than zero. Whether VPD
-  still discards them is the natural next run.
+- **Only the minimum-norm target was used.** Elsewhere on the solution set (e.g. GD
+  without ridge, excess units non-zero but cancelled by W₂), the local λ is half the
+  codimension of the component the point lies on. That equals λ on the largest component
+  and is larger on the others. At such points the Hessian rank equals 2·(local λ)
+  ([`../../arc/`](../../arc/README.md), §2), so Hessian and λ no longer separate there.
+  The excess components would be causally inert rather than zero. Whether VPD still
+  discards them, and so departs from the Hessian, is the natural next run.
 - **Linear targets only.** VPD's interesting regime is sparse, input-dependent
   mechanism use. That regime is where TMS showed VPD finding descriptions *shorter* than
   the ground truth (`../RESULTS.md`).

@@ -4,10 +4,10 @@
 
 codim taken in J_{p-1}(R^d) (dimension d p), with base points free near w0.
 
-Replaces contact_dim.py (4e), which accepted witnesses by a K threshold and failed.
+Replaces early/contact_dim.py (NOTEBOOK.md 4e), which accepted witnesses by a K threshold and failed.
 Here:
   * the coefficient map c -> (Taylor coeffs 0..p-1 of f(gamma(t))) comes from
-    jax.experimental.jet (factorial_scaled=False, x64), verified in jet_test.py;
+    jax.experimental.jet (factorial_scaled=False, x64), verified in early/jet_test.py;
   * landing on the contact locus uses Gauss-Newton (min-norm least squares) on
     that map. It converges onto the locus, linearly at worst (non-reduced equations
     like |c1|^2 = 0), so acceptance is by convergence, not by a K threshold;
@@ -16,7 +16,7 @@ Here:
     undercount over R, e.g. for |c1|^2 = 0.
 p = 1 is the step-0 tangent-excess estimator (codim of the true set).
 
-Validation: exact table of the context file, (b - a^2)^2, the cusp (a^2 - b^3)^2
+Validation: exact table of NOTEBOOK.md section 2, (b - a^2)^2, the cusp (a^2 - b^3)^2
 (generic-point methods give 1/2, the truth is 5/12), the real-vs-complex case
 f = x^2+y^2+z^2, symmetric factorization, and small RRR cells.
 """
