@@ -59,10 +59,14 @@ results.
   becomes integer minimization of a quadratic.
 - **What the Hessian misses is tangent excess, not higher-order contact.** On RRR, λ is
   half the codimension of the largest component of the true set. All components meet at
-  the minimum-norm solution, which is where ridge-regularized training, DDS and VPD read
-  the model. There the Hessian rank falls short of 2λ by (H − r0)(N − r0). At generic
+  the minimum-norm solution, which is where the repo's DDS and VPD studies read the
+  model. There the Hessian rank falls short of 2λ by (H − r0)(N − r0). At generic
   true points it doesn't: the minimum Hessian rank over unregularized restarts recovers
   2λ on all 14 cells.
+- **In practice** (arc/README §7): without weight decay and with runs trained to
+  convergence, a single Hessian read overestimates λ, and the minimum over 10-20 GD
+  restarts is exact in 95-100% of cells.
+  Weight decay breaks it, in either direction depending on how the rank is thresholded.
 - **Deep linear networks.** A direct arc-space proof that rlct = codim/2 at depth 3 (outer
   Smith forms plus a totally unimodular linear program). Previously this followed only by
   comparing Pepin Lehalleur–Rimányi's codimension with Aoyagi's formula. Depth ≥ 4 is

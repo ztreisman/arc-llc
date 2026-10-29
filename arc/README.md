@@ -48,9 +48,10 @@ the minimum-norm point. There
 the excess of the tangent space over the true set's dimension. On the repo's 14-cell
 anchor grid this is (H − r0)(N − r0).
 
-- Ridge regularization and small initialization select the minimum-norm point, which is
-  why Hessian rank, DDS and VPD (see `../param_decomp_compare/rrr/`) all read
-  r0(N+M−r0) there, independent of H.
+- The repo's DDS and VPD studies (`../param_decomp_compare/rrr/`) read the model at the
+  exactly constructed minimum-norm point, which is why they, like the Hessian rank there,
+  give r0(N+M−r0) independent of H. Ridge-regularized training drifts to that point too,
+  but only once the excess directions have decayed (§7).
 - At a generic point of the largest component, rank ∇²K = 2λ. Taking the minimum Hessian
   rank over unregularized GD restarts (polished onto Z) recovers 2λ on 14/14 cells at
   three init scales. Perturb-and-project from the minimum-norm point also gives 14/14.
@@ -127,6 +128,51 @@ a non-reduced jet scheme near a singular point at finite precision needs
 numerical-algebraic-geometry tools (real witness sets, homotopy continuation). It is a
 validation tool, not an estimator for real networks.
 
+### 7. The min-over-restarts Hessian estimator in practice (verified) — 4l
+
+§2 says the minimum Hessian rank over restarts recovers 2λ on RRR if runs reach generic
+points of the true set. [`hessian_restarts.py`](hessian_restarts.py) tests this the way
+a practitioner would run it. That means full-batch GD on K + ridge·‖w‖² for a fixed
+20k steps, with no polishing onto the true set. Then the exact Hessian of K at the final
+point, and λ̂ = min rank/2 over R restarts, bootstrapped from 50 runs per setting.
+The grid is the 14 anchor cells × ridge ∈ {0, 1e-4, 1e-3, 1e-2} × init scale
+∈ {0.05, 0.5, 1.5} × R ∈ {1, …, 50}.
+
+![hessian restarts](results/hessian_restarts.png)
+
+*Mean λ̂/λ over the 14 cells (1 = exact). Top row: the repo's fixed relative tolerance
+(1e-6). Bottom row: a residual-aware tolerance that ignores eigenvalues below 4‖R‖_F,
+where R = W₂W₁ − M\*. In the ridge = 0.01 panels the init-0.05 and init-0.5 lines
+coincide.*
+
+- **Without weight decay, on converged runs, it works.** A single read overestimates λ
+  by 3-7%, because most runs land on smaller components (larger codimension). Errors
+  are one-sided upward, so the minimum over restarts converges. It is exact in 95-98%
+  of cells at R = 10 and 98-100% at R = 20.
+- **Weight decay breaks the fixed-tolerance read upward.** λ̂/λ is 1.18-1.34 even at
+  R = 50. The exception is ridge 1e-4 from init 1.5, where runs have not converged and
+  the ridge has barely acted. Runs never reach the true set. The residual R ≠ 0 adds a
+  curvature term 2⟨R, dW₂dW₁⟩ to the Hessian of K, whose ± eigenvalues of size ~‖R‖ clear
+  the tolerance and get counted as rank.
+- **Thresholding out the residual exposes the minimum-norm undercount.** With a
+  residual-aware tolerance, ridge 1e-4 at init 0.5 recovers λ (exact in 96% of cells at
+  R = 10). But once ridge has had time to remove the excess directions (ridge = 1e-2, or
+  ridge = 1e-3 from small init), every run sits at the minimum-norm point. There
+  rank = r0(N+M−r0) and λ̂/λ ≈ 0.84, correct only in the 4 cells with no excess capacity.
+  This is the regime of the repo's DDS and VPD studies.
+- **Unconverged runs make the minimum unsafe.** From init scale 1.5 the loss is still
+  ~2·10⁻⁴ after 20k steps. A residual-aware threshold then also removes genuine small
+  curvature, so 35-44% of single reads fall *below* 2λ. Taking the minimum over more
+  restarts selects those, and accuracy falls as R grows (λ̂/λ → 0.61). The fixed
+  tolerance happens to survive here because it errs upward.
+
+**Practical reading.** The estimator needs: no weight decay, or enough of it to land
+cleanly at a known point; runs trained until the residual is far below the smallest
+genuine curvature; and a rank threshold between the two. Min-over-restarts is only
+safe when per-run errors are one-sided upward, so a check for that, such as the spread
+of ranks across runs, belongs in any use of it. Caveats: population-loss full-batch GD,
+not SGD on finite data; a fixed step budget; a linear model.
+
 ## Files
 
 | file | contents | runtime |
@@ -137,6 +183,8 @@ validation tool, not an estimator for real networks.
 | [`aoyagi_compare.py`](aoyagi_compare.py) | §3: Aoyagi's deep-linear formula vs PLR through depth 5 | ~1 s |
 | [`deep_laces.py`](deep_laces.py) | §3: monomial strata, depths 2-5; `python deep_laces.py 3 L3` counts complete depth-3 minimizing strata | ~10 s |
 | [`real_vs_complex.py`](real_vs_complex.py) | §4: counterexamples, symmetric λ by Monte Carlo | ~20 s |
+| [`hessian_restarts.py`](hessian_restarts.py) | §7: min-over-restarts Hessian estimator vs restarts, ridge, init scale; writes `results/hessian_restarts.json` | ~40 min |
+| [`plot_hessian_restarts.py`](plot_hessian_restarts.py) | §7 figure from the saved results | seconds |
 | [`contact_gn.py`](contact_gn.py) | §6: numerical real contact loci | ~45 min |
 | [`early/`](early/) | first experiments: linear-arc orders, the failed tube-volume design, `jet` convention test, jet lifting demo (notebook 4a-4e) | |
 | [`NOTEBOOK.md`](NOTEBOOK.md) | chronological working notes, references | |

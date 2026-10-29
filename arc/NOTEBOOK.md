@@ -146,7 +146,7 @@ local dimension of Z at a singular point:
 
     2*lambda - rank H(w) = dim T_w Z - dim_w Z.
 
-The min-norm (ridge-selected) point is where the components of the variety of complexes
+The min-norm point (where long ridge-regularized training ends up; see 4l) is where the components of the variety of complexes
 meet, so every Hessian-based observable undercounts there. At a generic point of the
 largest component, rank H = 2*lambda. lct = codim is special here. Why is open:
 plausibly because the variety of complexes has mild (rational) singularities, but no
@@ -306,6 +306,31 @@ tuning will not fix it; it needs numerical-AG machinery (real witness sets / hom
 continuation: Bertini, HomotopyContinuation.jl) or exact computation. Runtime is also
 minutes per small case, so this is a validation tool, not an LLC estimator for nets.
 
+### 4l. Min-over-restarts Hessian estimator in practice (`arc/hessian_restarts.py`)
+Full-batch GD on K + ridge*||w||^2, 20k steps, no polishing onto Z. Exact Hessian of K
+(2 J^T J + residual term 2<R, dW2 dW1>, checked against torch autograd to 4e-15).
+lambda_hat = min rank/2 over R restarts, bootstrapped from 50 runs. Grid: 14 cells x
+ridge {0, 1e-4, 1e-3, 1e-2} x init {0.05, 0.5, 1.5} x R {1, 2, 5, 10, 20, 50}.
+Rank rules: fixed relative tol 1e-6; largest log-spectral gap; residual-aware tol
+(ignore |eig| < 4 ||R||_F).
+- No ridge, converged (init 0.05, 0.5; K ~ 1e-21, 1e-30): a single read overestimates by
+  3-7% (most runs land on smaller components). Min over R = 10 / 20 is exact in 95-98% /
+  98-100% of cells.
+- Ridge > 0, fixed tol: overcounts (lambda_hat/lambda 1.18-1.34 at R = 50). Runs never
+  reach Z, and the residual-curvature term has +/- eigenvalues ~||R|| above tolerance.
+  My prediction was the opposite (collapse to the min-norm rank); that only happens once
+  the excess has decayed, at rate ~ ridge * lr * steps.
+- Residual-aware tol: ridge 1e-4 / init 0.5 recovers lambda (0.96 exact at R = 10). With
+  ridge 1e-2, or ridge 1e-3 from init 0.05, the excess has decayed and every run reads the
+  min-norm rank r0(N+M-r0): lambda_hat/lambda = 0.84, exact only on the 4 H = r0 cells.
+- Unconverged (init 1.5, K ~ 2e-4 at 20k steps): the residual-aware threshold also
+  removes genuine curvature; 35-44% of single reads are below 2*lambda, and min over
+  restarts gets WORSE with R (0.61 at R = 50). Min-over-restarts is only safe when
+  per-run errors are one-sided upward.
+- Small init alone (0.05, no ridge) does NOT reach the min-norm point in 20k steps. The
+  excess singular values stay well above tolerance. Earlier write-ups claimed small init
+  selects the min-norm point; corrected.
+
 ---
 
 ## 5. Next steps (in priority order)
@@ -318,11 +343,9 @@ factorization. 4 PARTIAL (4k). 5 DONE (4j): Morse-Bott, no gap.
    the variety of complexes (why: rational singularities?, check De Concini-Strickland /
    Kempf and whether lct = codim is known there); tangent-excess explanation of the
    repo's Hessian / DDS / VPD gaps (min-norm point = intersection of components).
-2. **Practical consequence for the repo.** The min-codim Hessian estimator is exact on RRR
-   when restarts are unregularized and land on generic true points. But it can miss
-   the largest component (4g caveat), and ridge or small init pushes runs to the
-   singular point. Worth an experiment: estimator accuracy vs number of restarts, ridge,
-   and init scale on the anchor grid.
+2. **Practical consequence for the repo.** DONE (4l). Follow-ups: SGD on finite data
+   instead of population GD; a data-driven rank threshold (e.g. from the residual and
+   the spectrum's gap); the same test on a nonlinear model.
 3. **Real vs complex, theory.** State the correct principle: rlct = RLCT_R(a)/2 (Lin);
    = lct_C(a)/2 iff some divisor computing lct_C has real points of full dimension in a
    real log resolution. Find the literature statement (Saito 0707.2308 for functions;
@@ -368,6 +391,7 @@ mechanism (4i), where DDS's additive 1/4-per-direction count is right.
 | `aoyagi_compare.py` | Aoyagi's deep-linear formula vs PLR | done (4h'') |
 | `deep_laces.py` | monomial strata; depth-3 pole order | done (4h'') |
 | `contact_gn.py` | Design E: numerical real contact loci | partial (4k) |
+| `hessian_restarts.py`, `plot_hessian_restarts.py` | min-over-restarts Hessian estimator in practice | done (4l) |
 
 ---
 
